@@ -127,8 +127,14 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
         Yaml::Hash(t) => {
             let hash = env.call(
                 "make-hash-table",
-                [env.intern(":test")?, env.intern("equal")?],
+                [
+                    SYM_PARAM_TEST.bind(env),
+                    SYM_EQUAL.bind(env),
+                    SYM_PARAM_SIZE.bind(env),
+                    t.len().into_lisp(env)?,
+                ],
             )?;
+
             for (key, value) in t {
                 env.call(
                     "puthash",
