@@ -1,5 +1,5 @@
-use emacs::{Env, Result, Value, defun};
-use yaml_rust2::{Event, YamlLoader, parser::Parser};
+use emacs::{defun, Env, Result, Value};
+use yaml_rust2::{parser::Parser, Event, YamlLoader};
 
 mod yamlwrapper;
 use yamlwrapper::YamlWrapper;
