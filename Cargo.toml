@@ -2,10 +2,11 @@
 name = "yamlmod"
 version = "0.2.0"
 description = "Emacs dynamic module to parse yaml written in Rust"
-authors = ["Ayush Goyal <ayush@helpshift.com>"]
+authors = ["Ayush Goyal <ayush@helpshift.com>", "Isa Mert Gurbuz <isamertgurbuz@gmail.com>"]
 edition = "2024"
+rust-version = "1.85"
 keywords = ["emacs", "emacs-module", "yaml", "parser"]
-license = "MIT License"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]

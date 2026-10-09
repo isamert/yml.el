@@ -43,7 +43,7 @@ git clone https://github.com/perfectayush/emacs-yamlmod.git
 cd emacs-yamlmod
 make
 ```
-Build requires `rust` and `cargo` to be pre-installed.
+Build requires Rust 1.85 or newer and Cargo to be pre-installed.
 
 ### Load in Emacs
 ```elisp
