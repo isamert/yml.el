@@ -13,11 +13,7 @@ impl<'e> IntoLisp<'e> for YamlWrapper {
                     .collect::<Result<Vec<_>>>()?;
                 env.vector(&values)
             }
-            Yaml::String(t) => match t.as_ref() {
-                "y" | "yes" | "True" | "true" => env.intern("t"),
-                "no" | "False" | "false" => env.intern("nil"),
-                _ => t.into_lisp(env),
-            },
+            Yaml::String(s) => s.into_lisp(env),
             Yaml::Boolean(t) => t.into_lisp(env),
             Yaml::Hash(t) => {
                 let hash = env.call(
