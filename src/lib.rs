@@ -124,29 +124,64 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
                 ArrayType::Array => env.vector(&values),
             }
         }
-        Yaml::Hash(t) => {
-            let hash = env.call(
-                "make-hash-table",
-                [
-                    SYM_PARAM_TEST.bind(env),
-                    SYM_EQUAL.bind(env),
-                    SYM_PARAM_SIZE.bind(env),
-                    t.len().into_lisp(env)?,
-                ],
-            )?;
-
-            for (key, value) in t {
-                env.call(
-                    "puthash",
+        Yaml::Hash(t) => match options.object_type {
+            ObjectType::HashTable => {
+                let hash = env.call(
+                    "make-hash-table",
                     [
-                        yaml_to_lisp(env, key, options)?,
-                        yaml_to_lisp(env, value, options)?,
-                        hash,
+                        SYM_PARAM_TEST.bind(env),
+                        SYM_EQUAL.bind(env),
+                        SYM_PARAM_SIZE.bind(env),
+                        t.len().into_lisp(env)?,
                     ],
                 )?;
+
+                for (key, value) in t {
+                    env.call(
+                        "puthash",
+                        [
+                            yaml_to_lisp(env, key, options)?,
+                            yaml_to_lisp(env, value, options)?,
+                            hash,
+                        ],
+                    )?;
+                }
+                Ok(hash)
             }
-            Ok(hash)
-        }
+            ObjectType::AssociationList => {
+                let pairs = t
+                    .into_iter()
+                    .map(|(key, val)| {
+                        env.cons(
+                            yaml_to_lisp(env, key, options)?,
+                            yaml_to_lisp(env, val, options)?,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                env.list(&pairs)
+            }
+            ObjectType::PropertyList => {
+                let mut plist = Vec::with_capacity(t.len() * 2);
+
+                for (key, value) in t {
+                    let keyword = match key {
+                        Yaml::String(key) => env.intern(&format!(":{key}"))?,
+                        _ => {
+                            return env.signal(
+                                "error",
+                                ("YAML plist keys must be strings",),
+                            );
+                        }
+                    };
+
+                    plist.push(keyword);
+                    plist.push(yaml_to_lisp(env, value, options)?);
+                }
+
+                env.list(&plist)
+            }
+        },
         Yaml::Real(t) => env.call("string-to-number", [t.into_lisp(env)?]),
         Yaml::Integer(t) => t.into_lisp(env),
         Yaml::Alias(x) => env.signal(
