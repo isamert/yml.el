@@ -53,6 +53,21 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   (yamlmod--parse-string
    string object-type array-type null-object false-object))
 
+;;;###autoload
+(cl-defun yamlmod-parse-string-all
+    (string &key
+            (object-type 'hash-table)
+            (array-type 'array)
+            (null-object :null)
+            (false-object :false))
+  "Same as `yamlmod-parse-string' but supports multi document YAMLs.
+
+Returned result is a list of Lisp objects.  See `yamlmod-parse-string'
+for STRING, OBJECT-TYPE, ARRAY-TYPE, NULL-OBJECT AND FALSE-OBJECT."
+  (yamlmod--parse-string
+   string object-type array-type null-object false-object
+   'parse-all))
+
 (provide 'yamlmod-wrapper)
 
 ;;; yamlmod-wrapper.el ends here

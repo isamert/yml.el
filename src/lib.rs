@@ -59,6 +59,7 @@ fn _parse_string<'e>(
     array_type: Value<'e>,
     null_object: Value<'e>,
     false_object: Value<'e>,
+    parse_all: Option<Value<'e>>,
 ) -> Result<Value<'e>> {
     let array_type = match array_type {
         value if value == SYM_ARRAY.bind(env) => ArrayType::Array,
@@ -95,16 +96,24 @@ fn _parse_string<'e>(
         Err(error) => return env.signal(yamlmod_parse_error, (error.to_string(),)),
     };
 
-    if documents.len() > 1 {
-        return env.signal(
-            yamlmod_trailing_content,
-            ("Expected a single YAML document; found multiple documents",),
-        );
+    if parse_all.is_some() {
+        let all_documents = documents
+            .into_iter()
+            .map(|doc| yaml_to_lisp(env, doc, &options))
+            .collect::<Result<Vec<_>>>()?;
+
+        env.list(&all_documents)
+    } else {
+        if documents.len() > 1 {
+            return env.signal(
+                yamlmod_trailing_content,
+                ("Expected a single YAML document; found multiple documents",),
+            );
+        }
+
+        let document = documents.into_iter().next().unwrap_or(Yaml::Null);
+        yaml_to_lisp(env, document, &options)
     }
-
-    let document = documents.into_iter().next().unwrap_or(Yaml::Null);
-
-    yaml_to_lisp(env, document, &options)
 }
 
 // * Helpers
