@@ -27,7 +27,7 @@ struct ParseOptions<'e> {
 
 #[emacs::module]
 fn init(env: &Env) -> Result<Value<'_>> {
-    env.message("Loading yamlmod!")
+    env.message("Loading yml!")
 }
 
 emacs::use_symbols! {
@@ -42,14 +42,14 @@ emacs::use_symbols! {
 }
 
 emacs::define_errors! {
-    yamlmod_error "YAML error"
-    yamlmod_parse_error "YAML parsing error" (yamlmod_error)
-    yamlmod_trailing_content "Unexpected additional YAML document" (yamlmod_parse_error)
-    yamlmod_unsupported_alias "Unsupported YAML alias" (yamlmod_parse_error)
-    yamlmod_non_string_key "Unexpected non-string key with plist object type" (yamlmod_parse_error)
+    yml_error "YAML error"
+    yml_parse_error "YAML parsing error" (yml_error)
+    yml_trailing_content "Unexpected additional YAML document" (yml_parse_error)
+    yml_unsupported_alias "Unsupported YAML alias" (yml_parse_error)
+    yml_non_string_key "Unexpected non-string key with plist object type" (yml_parse_error)
 }
 
-// * defun yamlmod--parse-string
+// * defun yml--parse-string
 
 #[defun]
 fn _parse_string<'e>(
@@ -93,7 +93,7 @@ fn _parse_string<'e>(
 
     let documents = match YamlLoader::load_from_str(&yaml) {
         Ok(documents) => documents,
-        Err(error) => return env.signal(yamlmod_parse_error, (error.to_string(),)),
+        Err(error) => return env.signal(yml_parse_error, (error.to_string(),)),
     };
 
     if parse_all.is_some() {
@@ -106,7 +106,7 @@ fn _parse_string<'e>(
     } else {
         if documents.len() > 1 {
             return env.signal(
-                yamlmod_trailing_content,
+                yml_trailing_content,
                 ("Expected a single YAML document; found multiple documents",),
             );
         }
@@ -179,7 +179,7 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
                         Yaml::String(key) => env.intern(&format!(":{key}"))?,
                         key => {
                             return env.signal(
-                                yamlmod_non_string_key,
+                                yml_non_string_key,
                                 (
                                     "YAML plist keys must be strings",
                                     yaml_to_lisp(env, key, options)?,
@@ -198,9 +198,9 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
         Yaml::Real(t) => env.call("string-to-number", [t.into_lisp(env)?]),
         Yaml::Integer(t) => t.into_lisp(env),
         Yaml::Alias(x) => env.signal(
-            yamlmod_unsupported_alias,
+            yml_unsupported_alias,
             ("Unsupported alias field in the parsed YAML", x),
         ),
-        Yaml::BadValue => env.signal(yamlmod_parse_error, ("Invalid YAML value",)),
+        Yaml::BadValue => env.signal(yml_parse_error, ("Invalid YAML value",)),
     }
 }

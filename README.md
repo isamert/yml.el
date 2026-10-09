@@ -1,14 +1,14 @@
-YamlMod
+yml
 =======
 
 ## Overview
-**YamlMod** is an emacs-module to parse yaml, written in Rust.
+**yml** is an emacs-module to parse yaml, written in Rust.
 
 ## Usage
-YamlMod provides functions for parsing yaml string (`yamlmod-load`) 
-and yaml file (`yamlmod-read-file`). Additionally, it provides a 
+YamlMod provides functions for parsing yaml string (`yamlmod-load`)
+and yaml file (`yamlmod-read-file`). Additionally, it provides a
 function `yamlmod-ypath-search` to get character index to navigate in a
-yaml string. The output from `yamlmod-ypath-search` can be used to jump 
+yaml string. The output from `yamlmod-ypath-search` can be used to jump
 in a yaml file with `goto-char`
 
 ### Elisp Examples
@@ -25,8 +25,8 @@ in a yaml file with `goto-char`
 ;; Parse a yaml file to elisp data structure
 (setq file-yaml (yamlmod-read-file "/path/to/filename.yml"))
 
-;; Get character index in a yaml string using ypath (a nested 
-;; key lookup separated by period). The index starts with 1 for 
+;; Get character index in a yaml string using ypath (a nested
+;; key lookup separated by period). The index starts with 1 for
 ;; use with `goto-char`
 (yamlmod-ypath-search "{a: [1, 2], b: {c: [3, 4]}}" "a")              ;; => 2
 (yamlmod-ypath-search "{a: [1, 2], b: {c: [3, 4]}}" "a.2")            ;; => 9
@@ -50,7 +50,7 @@ Build requires Rust 1.85 or newer and Cargo to be pre-installed.
 (add-to-load-path "/path/to/directory/for/emacs-yamlmod")
 (require 'yamlmod-wrapper)
 ```
-This module depends on [f.el](https://github.com/rejeep/f.el). It should be 
+This module depends on [f.el](https://github.com/rejeep/f.el). It should be
 present on load path
 
 
@@ -69,8 +69,8 @@ implementation a lot easier.
 
 ## Known Issues
 - Currently, all boolean like strings "yes", "Yes", "no", "No", "True", "False"
-  etc. are always parsed as 't or nil, even if they are quoted. 
+  etc. are always parsed as 't or nil, even if they are quoted.
 - Only tested on macOS, but should be portable on other platforms.
-  
+
 ## Todos
 - Write a dump function to dump elisp data structure to yaml

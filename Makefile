@@ -6,14 +6,14 @@ else
 MODULE_EXT := so
 endif
 
-.PHONY: build yamlmod.so clean
+.PHONY: build yml.so clean
 
-build: yamlmod.so
+build: yml.so
 
-yamlmod.so:
+yml.so:
 	cargo build --release
-	ln -sfn target/release/libyamlmod.$(MODULE_EXT) yamlmod.so
+	ln -sfn target/release/libyml.$(MODULE_EXT) yml.so
 
 clean:
 	cargo clean
-	rm -f yamlmod.so
+	rm -f yml.so
