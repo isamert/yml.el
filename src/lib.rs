@@ -93,7 +93,18 @@ fn _parse_string<'e>(
 
     let documents = match YamlLoader::load_from_str(&yaml) {
         Ok(documents) => documents,
-        Err(error) => return env.signal(yml_parse_error, (error.to_string(),)),
+        Err(error) => {
+            let marker = error.marker();
+            return env.signal(
+                yml_parse_error,
+                (
+                    error.info(),
+                    marker.line(),
+                    marker.col() + 1,
+                    marker.index() + 1,
+                ),
+            );
+        }
     };
 
     if parse_all.is_some() {
