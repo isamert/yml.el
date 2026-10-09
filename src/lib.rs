@@ -16,27 +16,27 @@ fn init(env: &Env) -> Result<Value<'_>> {
 // Parse a yaml string into elisp data structure
 #[defun]
 fn load(yaml: String) -> Result<YamlWrapper> {
-    let doc0 = &YamlLoader::load_from_str(&yaml).unwrap();
-    Ok(YamlWrapper(doc0[0].clone()))
+    let documents = YamlLoader::load_from_str(&yaml)?;
+    Ok(YamlWrapper(documents[0].clone()))
 }
 
 // Search a ypath in yaml. ypath is a dot separated string, to act as nested key
 // lookup for yaml
 #[defun]
 fn ypath_search(yaml: String, ypath: String) -> Result<Option<usize>> {
-    let mut ypath_vec = reset_search_ypath_vec(&ypath);
-    let mut doc = Parser::new(yaml.chars());
+    let mut remaining_path = split_search_path(&ypath);
+    let mut parser = Parser::new(yaml.chars());
     let mut search_depth: u64 = 0;
     loop {
-        let (event, marker) = doc.next_token().unwrap();
+        let (event, marker) = parser.next_token()?;
         match event {
-            Event::DocumentEnd => break,
+            Event::DocumentEnd | Event::StreamEnd => break,
             Event::Scalar(scalar, _, _, _) => {
-                if scalar == ypath_vec[0] {
-                    ypath_vec.remove(0);
+                if scalar == remaining_path[0] {
+                    remaining_path.remove(0);
                 }
 
-                if ypath_vec.is_empty() {
+                if remaining_path.is_empty() {
                     return Ok(Some(marker.index() + 1));
                 }
             }
@@ -45,18 +45,18 @@ fn ypath_search(yaml: String, ypath: String) -> Result<Option<usize>> {
             }
             Event::MappingEnd | Event::SequenceEnd => {
                 search_depth -= 1;
-                // reset ypath_vec if value not found in a nest
+                // reset remaining_path if value not found in a nest
                 if search_depth == 0 {
-                    ypath_vec = reset_search_ypath_vec(&ypath)
+                    remaining_path = split_search_path(&ypath);
                 }
             }
             _ => (),
         }
     }
-    return Ok(None);
+    Ok(None)
 }
 
 // helper function for ypath_search
-fn reset_search_ypath_vec(search_path: &str) -> Vec<&str> {
-    search_path.split(".").collect::<Vec<&str>>()
+fn split_search_path(search_path: &str) -> Vec<&str> {
+    search_path.split('.').collect()
 }
