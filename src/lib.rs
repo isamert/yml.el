@@ -46,6 +46,7 @@ emacs::define_errors! {
     yamlmod_parse_error "YAML parsing error" (yamlmod_error)
     yamlmod_trailing_content "Unexpected additional YAML document" (yamlmod_parse_error)
     yamlmod_unsupported_alias "Unsupported YAML alias" (yamlmod_parse_error)
+    yamlmod_non_string_key "Unexpected non-string key with plist object type" (yamlmod_parse_error)
 }
 
 // * defun yamlmod--parse-string
@@ -167,10 +168,13 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
                 for (key, value) in t {
                     let keyword = match key {
                         Yaml::String(key) => env.intern(&format!(":{key}"))?,
-                        _ => {
+                        key => {
                             return env.signal(
-                                "error",
-                                ("YAML plist keys must be strings",),
+                                yamlmod_non_string_key,
+                                (
+                                    "YAML plist keys must be strings",
+                                    yaml_to_lisp(env, key, options)?,
+                                ),
                             );
                         }
                     };
