@@ -13,9 +13,10 @@ fn init(env: &Env) -> Result<Value<'_>> {
 // * defun parse_string
 
 #[defun]
-fn parse_string(yaml: String) -> Result<YamlWrapper> {
+fn _parse_string(yaml: String) -> Result<YamlWrapper> {
     let documents = YamlLoader::load_from_str(&yaml)?;
-    Ok(YamlWrapper(documents[0].clone()))
+    let document = documents.into_iter().next().unwrap_or(Yaml::Null);
+    Ok(YamlWrapper(document))
 }
 
 // * YamlWrapper
