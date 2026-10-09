@@ -1,5 +1,5 @@
 [package]
-name = "yamlmod"
+name = "emacs-yml"
 version = "0.2.0"
 description = "Emacs dynamic module to parse yaml written in Rust"
 authors = ["Isa Mert Gurbuz <isamertgurbuz@gmail.com>", "Ayush Goyal <ayush@helpshift.com>"]
@@ -9,6 +9,7 @@ keywords = ["emacs", "emacs-module", "yaml", "yml", "parser"]
 license = "MIT"
 
 [lib]
+name = "yml"
 crate-type = ["cdylib"]
 
 [dependencies]
