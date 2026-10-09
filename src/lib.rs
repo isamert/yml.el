@@ -1,7 +1,27 @@
 use emacs::{defun, Env, IntoLisp, Result, Value};
-use yaml_rust2::{parser::Parser, Event, Yaml, YamlLoader};
+use yaml_rust2::{Yaml, YamlLoader};
 
 emacs::plugin_is_GPL_compatible!();
+
+// * Types
+
+enum ArrayType {
+    Array,
+    List,
+}
+
+enum ObjectType {
+    HashTable,
+    PropertyList,
+    AssociationList,
+}
+
+struct ParseOptions<'e> {
+    array_type: ArrayType,
+    object_type: ObjectType,
+    null_object: Value<'e>,
+    false_object: Value<'e>,
+}
 
 // * Init
 
@@ -10,51 +30,123 @@ fn init(env: &Env) -> Result<Value<'_>> {
     env.message("Loading yamlmod!")
 }
 
-// * defun parse_string
-
-#[defun]
-fn _parse_string(yaml: String) -> Result<YamlWrapper> {
-    let documents = YamlLoader::load_from_str(&yaml)?;
-    let document = documents.into_iter().next().unwrap_or(Yaml::Null);
-    Ok(YamlWrapper(document))
+emacs::use_symbols! {
+    SYM_ARRAY => "array"
+    SYM_LIST => "list"
+    SYM_HASH_TABLE => "hash-table"
+    SYM_PLIST => "plist"
+    SYM_ALIST => "alist"
+    SYM_EQUAL => "equal"
+    SYM_PARAM_TEST => ":test"
+    SYM_PARAM_SIZE => ":size"
 }
 
-// * YamlWrapper
+emacs::define_errors! {
+    yamlmod_error "YAML error"
+    yamlmod_parse_error "YAML parsing error" (yamlmod_error)
+    yamlmod_trailing_content "Unexpected additional YAML document" (yamlmod_parse_error)
+    yamlmod_unsupported_alias "Unsupported YAML alias" (yamlmod_parse_error)
+}
 
-pub struct YamlWrapper(pub Yaml);
+// * defun yamlmod--parse-string
 
-impl<'e> IntoLisp<'e> for YamlWrapper {
-    fn into_lisp(self, env: &'e Env) -> Result<Value<'e>> {
-        match self.0 {
-            Yaml::Array(items) => {
-                let values = items
-                    .into_iter()
-                    .map(|item| YamlWrapper(item).into_lisp(env))
-                    .collect::<Result<Vec<_>>>()?;
-                env.vector(&values)
-            }
-            Yaml::String(s) => s.into_lisp(env),
-            Yaml::Boolean(t) => t.into_lisp(env),
-            Yaml::Hash(t) => {
-                let hash = env.call(
-                    "make-hash-table",
-                    [env.intern(":test")?, env.intern("equal")?],
-                )?;
-                for (key, value) in t {
-                    env.call(
-                        "puthash",
-                        [
-                            YamlWrapper(key).into_lisp(env)?,
-                            YamlWrapper(value).into_lisp(env)?,
-                            hash,
-                        ],
-                    )?;
-                }
-                Ok(hash)
-            }
-            Yaml::Real(t) => env.call("string-to-number", [t.into_lisp(env)?]),
-            Yaml::Integer(t) => t.into_lisp(env),
-            _ => env.intern("nil"),
+#[defun]
+fn _parse_string<'e>(
+    env: &'e Env,
+    yaml: String,
+    object_type: Value<'e>,
+    array_type: Value<'e>,
+    null_object: Value<'e>,
+    false_object: Value<'e>,
+) -> Result<Value<'e>> {
+    let array_type = match array_type {
+        value if value == SYM_ARRAY.bind(env) => ArrayType::Array,
+        value if value == SYM_LIST.bind(env) => ArrayType::List,
+        value => {
+            return env.signal("error", ("One of array or list should be specified", value));
         }
+    };
+
+    let object_type = match object_type {
+        value if value == SYM_HASH_TABLE.bind(env) => ObjectType::HashTable,
+        value if value == SYM_PLIST.bind(env) => ObjectType::PropertyList,
+        value if value == SYM_ALIST.bind(env) => ObjectType::AssociationList,
+        value => {
+            return env.signal(
+                "error",
+                (
+                    "One of hash-table, alist or plist should be specified",
+                    value,
+                ),
+            );
+        }
+    };
+
+    let options = ParseOptions {
+        array_type,
+        object_type,
+        null_object,
+        false_object,
+    };
+
+    let documents = match YamlLoader::load_from_str(&yaml) {
+        Ok(documents) => documents,
+        Err(error) => return env.signal(yamlmod_parse_error, (error.to_string(),)),
+    };
+
+    if documents.len() > 1 {
+        return env.signal(
+            yamlmod_trailing_content,
+            ("Expected a single YAML document; found multiple documents",),
+        );
+    }
+
+    let document = documents.into_iter().next().unwrap_or(Yaml::Null);
+
+    yaml_to_lisp(env, document, &options)
+}
+
+// * Helpers
+
+fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Result<Value<'e>> {
+    match yaml {
+        Yaml::Null => Ok(options.null_object),
+        Yaml::String(s) => s.into_lisp(env),
+        Yaml::Boolean(false) => Ok(options.false_object),
+        Yaml::Boolean(true) => true.into_lisp(env),
+        Yaml::Array(items) => {
+            let values = items
+                .into_iter()
+                .map(|item| yaml_to_lisp(env, item, options))
+                .collect::<Result<Vec<_>>>()?;
+            match options.array_type {
+                ArrayType::List => env.list(&values),
+                ArrayType::Array => env.vector(&values),
+            }
+        }
+        Yaml::Hash(t) => {
+            let hash = env.call(
+                "make-hash-table",
+                [env.intern(":test")?, env.intern("equal")?],
+            )?;
+            for (key, value) in t {
+                env.call(
+                    "puthash",
+                    [
+                        yaml_to_lisp(env, key, options)?,
+                        yaml_to_lisp(env, value, options)?,
+                        hash,
+                    ],
+                )?;
+            }
+            Ok(hash)
+        }
+        Yaml::Real(t) => env.call("string-to-number", [t.into_lisp(env)?]),
+        Yaml::Integer(t) => t.into_lisp(env),
+        Yaml::Alias(x) => env.signal(
+            yamlmod_unsupported_alias,
+            ("Unsupported alias field in the parsed YAML", x),
+        ),
+        Yaml::BadValue => env.signal(yamlmod_parse_error, ("Invalid YAML value",)),
     }
 }
