@@ -1,62 +1,59 @@
-use emacs::{defun, Env, Result, Value};
-use yaml_rust2::{parser::Parser, Event, YamlLoader};
+use emacs::{defun, Env, IntoLisp, Result, Value};
+use yaml_rust2::{parser::Parser, Event, Yaml, YamlLoader};
 
-mod yamlwrapper;
-use yamlwrapper::YamlWrapper;
-
-// Emacs won't load the module without this.
 emacs::plugin_is_GPL_compatible!();
 
-// Register the initialization hook that Emacs will call when it loads the module.
+// * Init
+
 #[emacs::module]
 fn init(env: &Env) -> Result<Value<'_>> {
     env.message("Loading yamlmod!")
 }
 
-// Parse a yaml string into elisp data structure
+// * defun parse_string
+
 #[defun]
-fn load(yaml: String) -> Result<YamlWrapper> {
+fn parse_string(yaml: String) -> Result<YamlWrapper> {
     let documents = YamlLoader::load_from_str(&yaml)?;
     Ok(YamlWrapper(documents[0].clone()))
 }
 
-// Search a ypath in yaml. ypath is a dot separated string, to act as nested key
-// lookup for yaml
-#[defun]
-fn ypath_search(yaml: String, ypath: String) -> Result<Option<usize>> {
-    let mut remaining_path = split_search_path(&ypath);
-    let mut parser = Parser::new(yaml.chars());
-    let mut search_depth: u64 = 0;
-    loop {
-        let (event, marker) = parser.next_token()?;
-        match event {
-            Event::DocumentEnd | Event::StreamEnd => break,
-            Event::Scalar(scalar, _, _, _) => {
-                if scalar == remaining_path[0] {
-                    remaining_path.remove(0);
-                }
+// * YamlWrapper
 
-                if remaining_path.is_empty() {
-                    return Ok(Some(marker.index() + 1));
+pub struct YamlWrapper(pub Yaml);
+
+impl<'e> IntoLisp<'e> for YamlWrapper {
+    fn into_lisp(self, env: &'e Env) -> Result<Value<'e>> {
+        match self.0 {
+            Yaml::Array(items) => {
+                let values = items
+                    .into_iter()
+                    .map(|item| YamlWrapper(item).into_lisp(env))
+                    .collect::<Result<Vec<_>>>()?;
+                env.vector(&values)
+            }
+            Yaml::String(s) => s.into_lisp(env),
+            Yaml::Boolean(t) => t.into_lisp(env),
+            Yaml::Hash(t) => {
+                let hash = env.call(
+                    "make-hash-table",
+                    [env.intern(":test")?, env.intern("equal")?],
+                )?;
+                for (key, value) in t {
+                    env.call(
+                        "puthash",
+                        [
+                            YamlWrapper(key).into_lisp(env)?,
+                            YamlWrapper(value).into_lisp(env)?,
+                            hash,
+                        ],
+                    )?;
                 }
+                Ok(hash)
             }
-            Event::MappingStart(_, _) | Event::SequenceStart(_, _) => {
-                search_depth += 1;
-            }
-            Event::MappingEnd | Event::SequenceEnd => {
-                search_depth -= 1;
-                // reset remaining_path if value not found in a nest
-                if search_depth == 0 {
-                    remaining_path = split_search_path(&ypath);
-                }
-            }
-            _ => (),
+            Yaml::Real(t) => env.call("string-to-number", [t.into_lisp(env)?]),
+            Yaml::Integer(t) => t.into_lisp(env),
+            _ => env.intern("nil"),
         }
     }
-    Ok(None)
-}
-
-// helper function for ypath_search
-fn split_search_path(search_path: &str) -> Vec<&str> {
-    search_path.split('.').collect()
 }
