@@ -39,10 +39,30 @@ emacs::use_symbols! {
     SYM_EQUAL => "equal"
     SYM_PARAM_TEST => ":test"
     SYM_PARAM_SIZE => ":size"
+    SYM_INTEGER => "integer"
+    SYM_FLOAT => "float"
+    SYM_SYMBOL => "symbol"
+    SYM_CONS => "cons"
+    SYM_STRING => "string"
+    SYM_VECTOR => "vector"
+    SYM_PROCESS => "process"
+    SYM_NIL => "nil"
+    SYM_T => "t"
+}
+
+emacs::use_functions! {
+    FN_CONSP => "consp"
+    FN_YML__HASH_TABLE_PAIRS => "yml--hash-table-pairs"
+    FN_SYMBOL_NAME => "symbol-name"
+    FN_PUTHASH => "puthash"
+    FN_MAKE_HASH_TABLE => "make-hash-table"
 }
 
 emacs::define_errors! {
     yml_error "YAML error"
+
+    yml_serialization_error "YAML serialization error" (yml_error)
+
     yml_parse_error "YAML parsing error" (yml_error)
     yml_trailing_content "Unexpected additional YAML document" (yml_parse_error)
     yml_unsupported_alias "Unsupported YAML alias" (yml_parse_error)
@@ -127,7 +147,7 @@ fn _parse_string<'e>(
     }
 }
 
-// * Helpers
+// ** Helpers
 
 fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Result<Value<'e>> {
     match yaml {
@@ -147,25 +167,19 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
         }
         Yaml::Hash(t) => match options.object_type {
             ObjectType::HashTable => {
-                let hash = env.call(
-                    "make-hash-table",
-                    [
-                        SYM_PARAM_TEST.bind(env),
-                        SYM_EQUAL.bind(env),
-                        SYM_PARAM_SIZE.bind(env),
-                        t.len().into_lisp(env)?,
-                    ],
-                )?;
+                let hash = FN_MAKE_HASH_TABLE.bind(env).call([
+                    SYM_PARAM_TEST.bind(env),
+                    SYM_EQUAL.bind(env),
+                    SYM_PARAM_SIZE.bind(env),
+                    t.len().into_lisp(env)?,
+                ])?;
 
                 for (key, value) in t {
-                    env.call(
-                        "puthash",
-                        [
-                            yaml_to_lisp(env, key, options)?,
-                            yaml_to_lisp(env, value, options)?,
-                            hash,
-                        ],
-                    )?;
+                    FN_PUTHASH.bind(env).call([
+                        yaml_to_lisp(env, key, options)?,
+                        yaml_to_lisp(env, value, options)?,
+                        hash,
+                    ])?;
                 }
                 Ok(hash)
             }
@@ -206,7 +220,7 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
                 env.list(&plist)
             }
         },
-        Yaml::Real(t) => env.call("string-to-number", [t.into_lisp(env)?]),
+        Yaml::Real(_) => yaml.as_f64().into_lisp(env),
         Yaml::Integer(t) => t.into_lisp(env),
         Yaml::Alias(x) => env.signal(
             yml_unsupported_alias,
