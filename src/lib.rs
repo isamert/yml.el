@@ -1,3 +1,22 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Isa Mert Gurbuz
+// Copyright (C) 2019 Ayush Goyal (inherited MIT-covered code).
+// Modified by Isa Mert Gurbuz in 2026; distributed under GPLv3 or later.
+// The original MIT notice is preserved in LICENSES/MIT.txt.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 use emacs::{defun, Env, IntoLisp, Result, Value, Vector};
 use hashlink::LinkedHashMap;
 use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};

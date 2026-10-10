@@ -6,7 +6,7 @@ authors = ["Isa Mert Gurbuz <isamertgurbuz@gmail.com>", "Ayush Goyal <ayush@help
 edition = "2024"
 rust-version = "1.85"
 keywords = ["emacs", "emacs-module", "yaml", "yml", "parser"]
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [lib]
 name = "yml"

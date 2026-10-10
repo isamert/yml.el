@@ -6,6 +6,14 @@ strings/files very fast. Modeled after native `json-parse-string`'s
 interface, so it's pretty intuitive to use. It also supports much of
 the YAML quirks too.
 
+> Originally forked from
+> [perfectayush/emacs-yamlmod](https://github.com/perfectayush/emacs-yamlmod),
+> yml.el is an independently maintained derivative with a redesigned
+> API and additional functionality. The original code remains
+> [MIT-licensed](LICENSES/MIT.txt), while subsequent contributions in
+> this release and going forward are licensed under [GPLv3 or
+> later](LICENSE).
+
 ## Usage
 
 ```elisp
