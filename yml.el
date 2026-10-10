@@ -59,6 +59,12 @@ OBJECT-TYPE TYPE -- use TYPE to represent YAML objects.
 ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
   TYPE can be `array' (the default) or `list'.
 
+Integer parsing follows yaml-rust2.  Integers within the signed 64-bit
+range (-2^63 through 2^63-1) are represented exactly; larger literals may
+be interpreted as floats or strings, or rejected, depending on their
+syntax and tags.  Large decimal literals can lose precision when parsed
+as floats; exact large-integer round trips are not guaranteed.
+
 NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
   It defaults to `:null'.
 
@@ -93,7 +99,8 @@ OBJECT is translated as follows:
 
 t          -- the YAML true value.
 nil        -- Empty YAML object or null if NULL-OBJECT is nil
-number     -- a YAML number.
+integer    -- a YAML integer in the signed 64-bit range.
+float      -- a YAML floating-point number.
 string     -- a YAML string.
 vector     -- a YAML array.
 hash-table -- a YAML object.
@@ -105,6 +112,9 @@ Lists represent mappings, not YAML arrays.  Use vectors for arrays,
 including empty arrays ([]).  If parsing with ARRAY-TYPE set to `list',
 convert each resulting array list to a vector before serialization;
 `vconcat' converts one list, but does not convert nested arrays.
+
+Integers outside the signed 64-bit range (-2^63 through 2^63-1) signal
+`yml-serialization-error'.
 
 For duplicate object keys in an alist or plist, the last value is used.
 Parsing YAML with duplicate mapping keys is not supported.

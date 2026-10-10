@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use emacs::{defun, Env, IntoLisp, Result, Value, Vector};
+use emacs::{Env, ErrorKind, IntoLisp, ModuleError, Result, Value, Vector, defun};
 use hashlink::LinkedHashMap;
 use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};
 
@@ -240,10 +240,10 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
             }
         },
         Yaml::Real(_) => yaml.as_f64().into_lisp(env),
-        Yaml::Integer(t) => t.into_lisp(env),
-        Yaml::Alias(x) => env.signal(
+        Yaml::Integer(value) => value.into_lisp(env),
+        Yaml::Alias(id) => env.signal(
             yml_unsupported_alias,
-            ("Unsupported alias field in the parsed YAML", x),
+            ("Unsupported alias field in the parsed YAML", id),
         ),
         Yaml::BadValue => env.signal(yml_parse_error, ("Invalid YAML value",)),
     }
@@ -291,7 +291,21 @@ fn serialize_helper<'e>(
     let typ = env.type_of(object)?;
 
     if typ == SYM_INTEGER.bind(env) {
-        Ok(Yaml::Integer(object.into_rust()?))
+        match object.into_rust::<i64>() {
+            Ok(value) => Ok(Yaml::Integer(value)),
+            Err(error)
+                if matches!(
+                    error.downcast_ref::<ErrorKind>(),
+                    Some(ErrorKind::Module(ModuleError::IntegerOutOfRange { .. }))
+                ) =>
+            {
+                env.signal(
+                    yml_serialization_error,
+                    ("Integer outside supported signed 64-bit range", object),
+                )
+            }
+            Err(error) => Err(error),
+        }
     } else if typ == SYM_FLOAT.bind(env) {
         let val = object.into_rust::<f64>()?;
         let mut text = if val.is_nan() {
