@@ -9,11 +9,11 @@
 
 ;;; Commentary:
 
-;; Read YAML files using the `yml' dynamic module.
+;; Read YAML files using the `yml-core' dynamic module.
 
 ;;; Code:
 
-(require 'yml)
+(require 'yml-core)
 (require 'cl-lib)
 
 ;;;; Public
@@ -51,7 +51,7 @@ NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
 
 FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to `:false'."
-  (yml--parse-string
+  (yml-core--parse-string
    string object-type array-type null-object false-object))
 
 ;;;###autoload
@@ -65,7 +65,7 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
 
 Returned result is a list of Lisp objects.  See `yml-parse-string'
 for STRING, OBJECT-TYPE, ARRAY-TYPE, NULL-OBJECT AND FALSE-OBJECT."
-  (yml--parse-string
+  (yml-core--parse-string
    string object-type array-type null-object false-object
    'parse-all))
 
@@ -98,7 +98,7 @@ NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
 
 FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to :false."
-  (yml--serialize object null-object false-object))
+  (yml-core--serialize object null-object false-object))
 
 ;;;; Internal
 
