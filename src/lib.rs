@@ -45,7 +45,7 @@ struct ParseOptions<'e> {
 
 // * Init
 
-#[emacs::module]
+#[emacs::module(name = "yml-core")]
 fn init(env: &Env) -> Result<Value<'_>> {
     env.message("Loading yml!")
 }

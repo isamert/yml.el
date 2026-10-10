@@ -1,4 +1,6 @@
 /target
 **/*.rs.bk
-Cargo.lock
 yml-core.so
+yml-core.dll
+__pycache__/
+/dist/
