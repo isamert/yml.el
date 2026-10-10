@@ -1,5 +1,6 @@
-use emacs::{defun, Env, IntoLisp, Result, Value};
-use yaml_rust2::{Yaml, YamlLoader};
+use emacs::{defun, Env, IntoLisp, Result, Value, Vector};
+use hashlink::LinkedHashMap;
+use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};
 
 emacs::plugin_is_GPL_compatible!();
 
@@ -227,5 +228,142 @@ fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Res
             ("Unsupported alias field in the parsed YAML", x),
         ),
         Yaml::BadValue => env.signal(yml_parse_error, ("Invalid YAML value",)),
+    }
+}
+
+// * defun yml--serialize
+
+#[defun]
+fn _serialize<'e>(
+    env: &'e Env,
+    object: Value<'e>,
+    null_object: Value<'e>,
+    false_object: Value<'e>,
+) -> Result<String> {
+    let yaml = serialize_helper(env, object, null_object, false_object)?;
+    let mut output = String::new();
+    YamlEmitter::new(&mut output).dump(&yaml[0]).unwrap();
+    return Ok(output);
+}
+
+// ** Helpers
+
+// TODO: Add a depth limit?
+fn serialize_helper<'e>(
+    env: &'e Env,
+    object: Value<'e>,
+    null_object: Value<'e>,
+    false_object: Value<'e>,
+) -> Result<Yaml> {
+    if object == null_object {
+        return Ok(Yaml::Null);
+    }
+    if object == false_object {
+        return Ok(Yaml::Boolean(false));
+    }
+    if object == SYM_T.bind(env) {
+        return Ok(Yaml::Boolean(true));
+    }
+    if object == SYM_NIL.bind(env) {
+        return Ok(Yaml::Hash(LinkedHashMap::with_capacity(0)));
+    }
+
+    let typ = env.type_of(object)?;
+
+    if typ == SYM_INTEGER.bind(env) {
+        Ok(Yaml::Integer(object.into_rust()?))
+    } else if typ == SYM_FLOAT.bind(env) {
+        let val = object.into_rust::<f64>()?;
+        let mut text = if val.is_nan() {
+            ".nan".to_string()
+        } else if val.is_infinite() && val.is_sign_positive() {
+            ".inf".to_string()
+        } else if val.is_infinite() {
+            "-.inf".to_string()
+        } else {
+            val.to_string()
+        };
+        if !text.contains(['.', 'e', 'E']) {
+            text.push_str(".0");
+        }
+        Ok(Yaml::Real(text))
+    } else if typ == SYM_STRING.bind(env) {
+        Ok(Yaml::String(object.into_rust()?))
+    } else if typ == SYM_VECTOR.bind(env) {
+        let items: Vector<'e> = object.into_rust()?;
+        Ok(Yaml::Array(
+            items
+                .into_iter()
+                .map(|item| serialize_helper(env, item, null_object, false_object))
+                .collect::<Result<Vec<_>>>()?,
+        ))
+    } else if typ == SYM_HASH_TABLE.bind(env) {
+        // TODO: Is it possible to collect pairs without calling elisp?
+        let pairs: Vector<'e> = FN_YML__HASH_TABLE_PAIRS
+            .bind(env)
+            .call([object])?
+            .into_rust()?;
+        let size = pairs.len();
+        let mut map = LinkedHashMap::with_capacity(size);
+        for pair in pairs {
+            let key: Value<'e> = pair.car()?;
+            let value: Value<'e> = pair.cdr()?;
+            map.insert(
+                serialize_helper(env, key, null_object, false_object)?,
+                serialize_helper(env, value, null_object, false_object)?,
+            );
+        }
+        Ok(Yaml::Hash(map))
+    } else if typ == SYM_CONS.bind(env) {
+        let is_alist = FN_CONSP.bind(env).call([object.car()?])?.is_not_nil();
+
+        let mut items: Vec<Value<'e>> = Vec::new();
+        let mut tail = object;
+        while tail.is_not_nil() {
+            if env.type_of(tail)? != SYM_CONS.bind(env) {
+                return env.signal(yml_serialization_error, ("Expected a proper list", object));
+            }
+            let head = tail.car()?;
+            tail = tail.cdr()?;
+            items.push(head);
+        }
+
+        let map = if is_alist {
+            let size = items.len();
+            let mut map = LinkedHashMap::with_capacity(size);
+            for pair in items {
+                let key: Value<'e> = pair.car()?;
+                let value: Value<'e> = pair.cdr()?;
+                map.insert(
+                    serialize_helper(env, key, null_object, false_object)?,
+                    serialize_helper(env, value, null_object, false_object)?,
+                );
+            }
+            map
+        } else {
+            let size = items.len() / 2;
+            let mut map = LinkedHashMap::with_capacity(size);
+            let mut items_iter = items.into_iter();
+            while let Some(key) = items_iter.next() {
+                let Some(value) = items_iter.next() else {
+                    return env.signal(
+                        yml_serialization_error,
+                        ("Expected an even number of elements in plist", object),
+                    );
+                };
+
+                let name: String = FN_SYMBOL_NAME.bind(env).call([key])?.into_rust()?;
+                let key_normalized = name.strip_prefix(':').unwrap_or(&name);
+
+                map.insert(
+                    Yaml::String(key_normalized.to_owned()),
+                    serialize_helper(env, value, null_object, false_object)?,
+                );
+            }
+            map
+        };
+        Ok(Yaml::Hash(map))
+    } else {
+        env.signal(yml_serialization_error, ("Unexpected type of object", typ))
     }
 }

@@ -1,4 +1,4 @@
-;;; yml.el --- Wraps yml dynamic module in elisp  -*- lexical-binding: t; -*-
+;;; yml.el --- Fast YAML parser  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 by Isa Mert Gurbuz
 
@@ -15,6 +15,8 @@
 
 (require 'yml)
 (require 'cl-lib)
+
+;;;; Public
 
 ;;;###autoload
 (cl-defun yml-parse-string
@@ -68,6 +70,47 @@ for STRING, OBJECT-TYPE, ARRAY-TYPE, NULL-OBJECT AND FALSE-OBJECT."
    string object-type array-type null-object false-object
    'parse-all))
 
-(provide 'yml-wrapper)
+;;;###autoload
+(cl-defun yml-serialize
+    (object &key
+            (null-object :null)
+            (false-object :false))
+  "Return the YAML representation of OBJECT as a string.
 
+OBJECT is translated as follows:
+
+t          -- the YAML true value.
+nil        -- Empty YAML object or null if NULL-OBJECT is nil
+number     -- a YAML number.
+string     -- a YAML string.
+vector     -- a YAML array.
+hash-table -- a YAML object.
+alist      -- a YAML object.
+plist      -- a YAML object.  Keys must be symbols.
+              A leading colon in plist key names is elided.
+
+For duplicate object keys, the last value is used.
+
+The Lisp equivalents to the YAML null and false values are
+configurable:
+
+NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
+  It defaults to :null.
+
+FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
+  It defaults to :false."
+  (yml--serialize object null-object false-object))
+
+;;;; Internal
+
+(defun yml--hash-table-pairs (table)
+  (let (pairs)
+    (maphash (lambda (key value)
+               (push (cons key value) pairs))
+             table)
+    (vconcat pairs)))
+
+;;;; Footer
+
+(provide 'yml-wrapper)
 ;;; yml.el ends here
