@@ -3,8 +3,8 @@
 ;; Copyright (C) 2026 by Isa Mert Gurbuz
 
 ;; Author: Isa Mert Gurbuz <isamertgurbuz@gmail.com>
-;; URL: https://github.com/isamert/emacs-yml
-;; Version: 0.2.0
+;; URL: https://github.com/isamert/yml.el
+;; Version: 0.1.0
 ;; License: MIT
 
 ;;; Commentary:
@@ -27,15 +27,14 @@
             (false-object :false))
   "Parse the YAML STRING into a Lisp value.
 
-This is essentially the reverse operation of `yml-serialize',
-which see.  The returned value will be the YAML null value, the YAML
-false value, t, a number, a string, a vector, a list, a hash-table, an
-alist, or a plist.  Its elements will be further values of these
-types.  If STRING doesn't contain a valid YAML value, this function
-signals an error of type `yml-parse-error'.  If the STRING
-contains multiple YAML values, then this function signals an error of
-type `yml-trailing-content'. You can use
-`yml-parse-string-all' to parse multi document YAML strings.
+This is essentially the reverse operation of `yml-serialize', which see.
+The returned value will be the YAML null value, the YAML false value, t,
+a number, a string, a vector, a list, a hash-table, an alist, or a
+plist.  Its elements will be further values of these types.  If STRING
+doesn't contain a valid YAML value, this function signals an error of
+type `yml-parse-error'.  If the STRING contains multiple YAML values,
+then this function signals an error of type `yml-trailing-content'.  You
+can use `yml-parse-string-all' to parse multi document YAML strings.
 
 OBJECT-TYPE TYPE -- use TYPE to represent YAML objects.
   TYPE can be `hash-table' (the default), `alist' or `plist'.
@@ -112,5 +111,5 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
 
 ;;;; Footer
 
-(provide 'yml-wrapper)
+(provide 'yml)
 ;;; yml.el ends here
