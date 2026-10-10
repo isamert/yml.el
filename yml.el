@@ -103,11 +103,14 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
 ;;;; Internal
 
 (defun yml--hash-table-pairs (table)
-  (let (pairs)
-    (maphash (lambda (key value)
-               (push (cons key value) pairs))
-             table)
-    (vconcat pairs)))
+  (let ((pairs (make-vector (hash-table-count table) nil))
+        (index 0))
+    (maphash
+     (lambda (key value)
+       (aset pairs index (cons key value))
+       (setq index (1+ index)))
+     table)
+    pairs))
 
 ;;;; Footer
 
