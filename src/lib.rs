@@ -72,7 +72,6 @@ emacs::use_symbols! {
 
 emacs::use_functions! {
     FN_CONSP => "consp"
-    FN_YML__HASH_TABLE_PAIRS => "yml--hash-table-pairs"
     FN_SYMBOL_NAME => "symbol-name"
     FN_PUTHASH => "puthash"
     FN_MAKE_HASH_TABLE => "make-hash-table"
@@ -261,8 +260,10 @@ fn _serialize<'e>(
 ) -> Result<String> {
     let yaml = serialize_helper(env, object, null_object, false_object)?;
     let mut output = String::new();
-    YamlEmitter::new(&mut output).dump(&yaml[0]).unwrap();
-    return Ok(output);
+    if let Err(error) = YamlEmitter::new(&mut output).dump(&yaml) {
+        return env.signal(yml_serialization_error, (error.to_string(),));
+    }
+    Ok(output)
 }
 
 // ** Helpers
@@ -318,10 +319,8 @@ fn serialize_helper<'e>(
         ))
     } else if typ == SYM_HASH_TABLE.bind(env) {
         // TODO: Is it possible to collect pairs without calling elisp?
-        let pairs: Vector<'e> = FN_YML__HASH_TABLE_PAIRS
-            .bind(env)
-            .call([object])?
-            .into_rust()?;
+        // yml.el defines this helper after loading the module, so cant cache the fn.
+        let pairs: Vector<'e> = env.call("yml--hash-table-pairs", [object])?.into_rust()?;
         let size = pairs.len();
         let mut map = LinkedHashMap::with_capacity(size);
         for pair in pairs {

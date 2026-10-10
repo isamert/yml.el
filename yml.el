@@ -52,9 +52,8 @@ can use `yml-parse-string-all' to parse multi document YAML strings.
 
 OBJECT-TYPE TYPE -- use TYPE to represent YAML objects.
   TYPE can be `hash-table' (the default), `alist' or `plist'.
-  If an object has members with the same key, `hash-table' keeps only
-  the last value of such keys, while `alist' and `plist' keep all the
-  members.  With `plist', non-string keys signals an error of type
+  Duplicate mapping keys are rejected with `yml-parse-error' for all
+  object types.  With `plist', non-string keys signal an error of type
   `yml-non-string-key'.
 
 ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
@@ -66,7 +65,7 @@ NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
 FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to `:false'."
   (yml-core--parse-string
-   string object-type array-type null-object false-object))
+   string object-type array-type null-object false-object nil))
 
 ;;;###autoload
 (cl-defun yml-parse-string-all
@@ -102,7 +101,13 @@ alist      -- a YAML object.
 plist      -- a YAML object.  Keys must be symbols.
               A leading colon in plist key names is elided.
 
-For duplicate object keys, the last value is used.
+Lists represent mappings, not YAML arrays.  Use vectors for arrays,
+including empty arrays ([]).  If parsing with ARRAY-TYPE set to `list',
+convert each resulting array list to a vector before serialization;
+`vconcat' converts one list, but does not convert nested arrays.
+
+For duplicate object keys in an alist or plist, the last value is used.
+Parsing YAML with duplicate mapping keys is not supported.
 
 The Lisp equivalents to the YAML null and false values are
 configurable:
