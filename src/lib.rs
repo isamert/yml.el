@@ -17,7 +17,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use emacs::{Env, ErrorKind, IntoLisp, ModuleError, Result, Value, Vector, defun};
+use emacs::{defun, Env, ErrorKind, IntoLisp, ModuleError, Result, Value, Vector};
 use hashlink::LinkedHashMap;
 use yaml_rust2::{Yaml, YamlEmitter};
 
@@ -49,8 +49,8 @@ struct ParseOptions<'e> {
 // * Init
 
 #[emacs::module(name = "yml-core")]
-fn init(env: &Env) -> Result<Value<'_>> {
-    env.message("Loading yml!")
+fn init(_: &Env) -> Result<()> {
+    Ok(())
 }
 
 emacs::use_symbols! {
@@ -91,7 +91,7 @@ emacs::define_errors! {
     yml_non_string_key "Unexpected non-string key with plist object type" (yml_parse_error)
 }
 
-// * defun yml--parse-string
+// * defun yml-core--parse-string
 
 #[defun]
 fn _parse_string<'e>(
@@ -254,7 +254,7 @@ fn yaml_to_lisp<'e>(
     }
 }
 
-// * defun yml--serialize
+// * defun yml-core--serialize
 
 #[defun]
 fn _serialize<'e>(
