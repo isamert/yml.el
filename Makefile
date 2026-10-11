@@ -1,25 +1,33 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Isa Mert Gurbuz
-# Copyright (C) 2019 Ayush Goyal (inherited MIT-covered code).
-# Modified by Isa Mert Gurbuz in 2026; distributed under GPLv3 or later.
-# See LICENSE for the GPL and LICENSES/MIT.txt for the original MIT notice.
+EMACS ?= emacs
+CARGO ?= cargo
+RUSTC ?= rustc
+CARGO_FLAGS ?=
+TARGET ?= $(shell $(RUSTC) -vV | sed -n 's/^host: //p')
+TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
 
-UNAME_S := $(shell uname -s)
-
-ifeq ($(UNAME_S),Darwin)
-MODULE_EXT := dylib
+ifneq (,$(findstring windows,$(TARGET)))
+LIBRARY := yml.dll
+MODULE := yml-core.dll
+else ifneq (,$(findstring apple-darwin,$(TARGET)))
+LIBRARY := libyml.dylib
+MODULE := yml-core.so
 else
-MODULE_EXT := so
+LIBRARY := libyml.so
+MODULE := yml-core.so
 endif
 
-.PHONY: build yml-core.so clean
+.PHONY: build yml-core.so yml-core.dll clean test
 
-build: yml-core.so
+build:
+	$(CARGO) build --release --locked --lib --target "$(TARGET)" --target-dir "$(TARGET_DIR)" $(CARGO_FLAGS)
+	rm -f "$(MODULE)"
+	cp "$(TARGET_DIR)/$(TARGET)/release/$(LIBRARY)" "$(MODULE)"
 
-yml-core.so:
-	cargo build --release
-	ln -sfn target/release/libyml.$(MODULE_EXT) yml-core.so
+yml-core.so yml-core.dll: build
 
 clean:
-	cargo clean
-	rm -f yml-core.so
+	$(CARGO) clean --target-dir "$(TARGET_DIR)"
+	rm -f yml-core.so yml-core.dll
+
+test: build
+	$(EMACS) --batch -Q -L . -l tests/yml-tests.el -f ert-run-tests-batch-and-exit
