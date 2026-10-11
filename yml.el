@@ -29,8 +29,12 @@
 
 ;;; Code:
 
-(require 'yml-core)
+(require 'yml-module-install)
 (require 'cl-lib)
+
+(declare-function yml-core--parse-string "yml-core"
+                  (string object-type array-type null-object false-object parse-all))
+(declare-function yml-core--serialize "yml-core" (object null-object false-object))
 
 ;;;; Public
 
@@ -72,6 +76,7 @@ NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
 
 FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to `:false'."
+  (yml--ensure-module)
   (yml-core--parse-string
    string object-type array-type null-object false-object nil))
 
@@ -86,6 +91,7 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
 
 Returned result is a list of Lisp objects.  See `yml-parse-string'
 for STRING, OBJECT-TYPE, ARRAY-TYPE, NULL-OBJECT AND FALSE-OBJECT."
+  (yml--ensure-module)
   (yml-core--parse-string
    string object-type array-type null-object false-object
    'parse-all))
@@ -130,6 +136,7 @@ NULL-OBJECT OBJ -- use OBJ to represent a YAML null value.
 
 FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to :false."
+  (yml--ensure-module)
   (yml-core--serialize object null-object false-object))
 
 ;;;; Internal
