@@ -12,7 +12,34 @@ the YAML quirks too.
 (require 'yml)
 
 (yml-parse-string "name: example\nitems: [1, 2]")
+;; => #s(hash-table test equal data ("name" "example" "items" [1 2]))
+
+(yml-parse-string "name: example\nitems: [1, 2]"
+                  :object-type 'alist)
+;; => (("name" . "example") ("items" . [1 2]))
+
+(yml-parse-string "name: example\nitems: [1, 2]"
+                  :object-type 'plist
+                  :array-type 'list)
+;; => (:name "example" :items (1 2))
+
+(yml-parse-string "[true, false, null]")
+;; => [t :false :null]
+
+(yml-parse-string "[true, false, null]"
+                  :false-object nil
+                  :null-object 'missing)
+;; => [t nil missing]
+
+(yml-parse-string-all "---\nname: first\n---\nname: second\n"
+                      :object-type 'plist)
+;; => ((:name "first") (:name "second"))
+
 (yml-serialize '(:name "example" :items [1 2]))
+;; => "---\nname: example\nitems:\n  - 1\n  - 2"
+
+(yml-serialize [t nil missing] :false-object nil :null-object 'missing)
+;; => "---\n- true\n- false\n- ~"
 ```
 
 ## Installation
@@ -47,6 +74,7 @@ Try it:
 
 ```elisp
 (yml-parse-string "name: example\nitems: [1, 2]")
+;; => #s(hash-table test equal data ("name" "example" "items" [1 2]))
 ```
 
 ## Prior Art
