@@ -404,3 +404,14 @@ fn serialize_helper<'e>(
         env.signal(yml_serialization_error, ("Unexpected type of object", typ))
     }
 }
+
+// * defun yml-core-version
+
+// This might be useful for diagnosing potential problems. Not using
+// it in the installer, it depends on the path of the library to
+// resolve the correct version.
+
+#[defun]
+fn version() -> Result<String> {
+    Ok(env!("CARGO_PKG_VERSION").to_owned())
+}
