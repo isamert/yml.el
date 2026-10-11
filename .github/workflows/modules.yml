@@ -10,7 +10,27 @@ on:
 permissions:
   contents: read
 
+env:
+  RUST_MSRV: '1.88.0'
+  RUST_RELEASE: '1.99.0'
+
 jobs:
+  msrv:
+    name: Test minimum Rust version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install minimum Rust toolchain
+        run: |
+          rustup toolchain install "$RUST_MSRV" --profile minimal
+          rustup default "$RUST_MSRV"
+      - name: Install Emacs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+      - name: Build and test native module
+        run: make test
+
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -59,17 +79,8 @@ jobs:
       - name: Install pinned Rust toolchain
         shell: bash
         run: |
-          rustup toolchain install 1.87.0 --profile minimal --target '${{ matrix.target }}'
-          rustup default 1.87.0
-      - name: Build native module
-        run: cargo build --release --locked --lib --target ${{ matrix.target }}
-      - name: Package module
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp 'target/${{ matrix.target }}/release/${{ matrix.library }}' \
-            'dist/yml-core-${{ matrix.target }}.${{ matrix.suffix }}'
+          rustup toolchain install "$RUST_RELEASE" --profile minimal --target '${{ matrix.target }}'
+          rustup default "$RUST_RELEASE"
       - name: Install Emacs (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -82,17 +93,20 @@ jobs:
         run: |
           brew install emacs
           echo "$(brew --prefix emacs)/bin" >> "$GITHUB_PATH"
-      - name: Install Emacs (Windows)
+      - name: Install Emacs and GNU Make (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install emacs --yes --no-progress
-      - name: Test integration in Emacs
+        run: choco install emacs make --yes --no-progress
+      - name: Build and test native module
+        shell: bash
+        run: make test TARGET=${{ matrix.target }} SHELL=bash
+      - name: Package module
         shell: bash
         run: |
-          emacs --version
-          emacs --batch -Q -L . \
-            --eval '(module-load (expand-file-name "dist/yml-core-${{ matrix.target }}.${{ matrix.suffix }}"))' \
-            -l tests/yml-tests.el -f ert-run-tests-batch-and-exit
+          set -euo pipefail
+          mkdir -p dist
+          cp 'target/${{ matrix.target }}/release/${{ matrix.library }}' \
+            'dist/yml-core-${{ matrix.target }}.${{ matrix.suffix }}'
       - uses: actions/upload-artifact@v4
         with:
           name: module-${{ matrix.target }}
@@ -102,7 +116,7 @@ jobs:
   publish:
     name: Publish release assets
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, msrv]
     runs-on: ubuntu-22.04
     permissions:
       contents: write

@@ -67,7 +67,7 @@ compile it yourself.
 
 ### Manual native module installation
 
-Build requires Rust 1.87 or newer and Cargo to be pre-installed.
+Build requires Rust 1.88 or newer and Cargo to be pre-installed.
 
 ```shell
 git clone https://github.com/isamert/yml.el

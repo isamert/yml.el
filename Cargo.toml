@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Emacs dynamic module to parse yaml written in Rust"
 authors = ["Isa Mert Gurbuz <isamertgurbuz@gmail.com>", "Ayush Goyal <ayush@helpshift.com>"]
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 keywords = ["emacs", "emacs-module", "yaml", "yml", "parser"]
 license = "GPL-3.0-or-later"
 
