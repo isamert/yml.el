@@ -45,16 +45,16 @@ the YAML quirks too.
 ## Installation
 
 ```elisp
-(use-package ellm
+(use-package yml
   ;; elpaca
-  :ensure (:host github :repo "isamert/ellm.el"
+  :ensure (:host github :repo "isamert/yml.el"
            :files ("*.el"))
 
-  ;; vc (requires use-package-vc)
-  ;; :vc (:url "https://github.com/isamert/ellm.el")
+  ;; vc
+  ;; :vc (:url "https://github.com/isamert/yml.el")
 
   ;; straight.el
-  ;; :straight (:host github :repo "isamert/ellm.el"
+  ;; :straight (:host github :repo "isamert/yml.el"
   ;;            :files ("*.el"))
   )
 ```
