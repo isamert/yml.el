@@ -6,20 +6,13 @@ strings/files very fast. Modeled after native `json-parse-string`'s
 interface, so it's pretty intuitive to use. It also supports much of
 the YAML quirks too.
 
-> Originally forked from
-> [perfectayush/emacs-yamlmod](https://github.com/perfectayush/emacs-yamlmod),
-> yml.el is an independently maintained derivative with a redesigned
-> API and additional functionality. The original code remains
-> [MIT-licensed](LICENSES/MIT.txt), while subsequent contributions in
-> this release and going forward are licensed under [GPLv3 or
-> later](LICENSE).
-
 ## Usage
 
 ```elisp
 (require 'yml)
 
-...TODO...
+(yml-parse-string "name: example\nitems: [1, 2]")
+(yml-serialize '(:name "example" :items [1 2]))
 ```
 
 ## Installation
@@ -41,13 +34,19 @@ make
 Add this project to load path:
 
 ```elisp
-(add-to-list 'load-path "/path/to/directory/for/yml.el")
+(add-to-list 'load-path "</path/to/directory/for/yml.el>")
 ```
 
 Then require it:
 
 ```elisp
 (require 'yml)
+```
+
+Try it:
+
+```elisp
+(yml-parse-string "name: example\nitems: [1, 2]")
 ```
 
 ## Prior Art
@@ -70,6 +69,26 @@ Then require it:
   a serialize function, multi-doc YAML parser, automatic native module
   installation etc. which now exists in this package. Thanks a lot for
   this package!
+
+### Benchmarks
+
+Average milliseconds per parse, on Emacs 31.1, x86-64 Linux.
+
+| Input       |    Size | yml.el hash-table | yml.el alist | yml.el plist | emacs-libyaml |
+|-------------|--------:|------------------:|-------------:|-------------:|--------------:|
+| docker.yaml |  470 KB |             14.85 |        13.39 |    **11.42** |         14.91 |
+| github.yaml | 9.90 MB |            291.87 |       265.09 |   **245.84** |        312.36 |
+| gitlab.yaml | 2.45 MB |             94.56 |        88.56 |    **79.85** |         98.21 |
+
+I was only able to complete the **docker.yaml** benchmark with
+yaml.el, which took **9.89 seconds** for one parse. So I just excluded
+it from the benchmarks.
+
+To reproduce (dependencies and inputs are cached in temporary directories):
+
+```sh
+emacs --batch -Q -L . -l benchmarks/yml-bench.el --eval '(yml-bench-run 15)'
+```
 
 ## Rationale
 
