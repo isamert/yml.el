@@ -210,7 +210,7 @@ Return a list of (FILENAME LABEL RESULT) entries, where RESULT is the
                       (message "Benchmarking %s with %s..." (car input) label)
                       (garbage-collect)
                       (let ((result (benchmark-run repetitions
-                                      (funcall function text))))
+                                                   (funcall function text))))
                         (push (list (car input) label result) results)
                         (princ (format "%-14s %-12s %12.6f %12.6f %8d %12.6f\n"
                                        (car input) label (nth 0 result)
