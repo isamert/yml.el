@@ -23,7 +23,9 @@
 
 ;;; Commentary:
 
-;; Read YAML files using the `yml-core' dynamic module.
+;; Like `json-parse-string' but for YAML.  Use `yml-parse-string' to
+;; parse YAMLs and `yml-serialize' to serialize Lisp objects into
+;; YAML.
 
 ;;; Code:
 
