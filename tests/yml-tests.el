@@ -1,0 +1,293 @@
+;;; yml-tests.el --- Native YAML integration tests -*- lexical-binding: t; -*-
+
+;; SPDX-License-Identifier: GPL-3.0-or-later
+;; Copyright (C) 2026 Isa Mert Gurbuz
+
+;;; Commentary:
+
+;; Test the public wrappers, Lisp/native conversions, and representative
+;; YAML documents parsed and serialized through the native module.
+;;   emacs --batch -Q -L . -l tests/yml-tests.el -f ert-run-tests-batch-and-exit
+
+;;; Code:
+
+(require 'ert)
+(require 'cl-lib)
+(require 'yml)
+
+(defun yml-tests--field (object key object-type)
+  "Read string KEY from OBJECT represented by OBJECT-TYPE."
+  (cl-ecase object-type
+    (hash-table (gethash key object))
+    (alist (cdr (assoc key object)))
+    (plist (plist-get object (intern (concat ":" key))))))
+
+(ert-deftest yml-wrapper-argument-forwarding ()
+   (cl-letf (((symbol-function 'yml-core--parse-string) #'list)
+             ((symbol-function 'yml-core--serialize) #'list))
+     (should (equal (yml-parse-string "input")
+                    '("input" hash-table array :null :false nil)))
+     (should (equal (yml-parse-string-all "input")
+                    '("input" hash-table array :null :false parse-all)))
+     (should (equal (yml-serialize [1]) '([1] :null :false)))
+     (dolist (parser '(yml-parse-string yml-parse-string-all))
+       (should (equal (funcall parser "input"
+                               :false-object 'no :null-object nil
+                               :array-type 'list :object-type 'plist)
+                      (list "input" 'plist 'list nil 'no
+                            (when (eq parser 'yml-parse-string-all)
+                              'parse-all)))))
+     (should (equal (yml-serialize [1] :false-object nil :null-object 'none)
+                    '([1] none nil)))))
+
+(ert-deftest yml-native-parser-representations ()
+  (let ((yaml "outer: {items: [1, {name: café}], empty: [], mapping: {}}"))
+    (dolist (object-type '(hash-table alist plist))
+      (dolist (array-type '(array list))
+        (dolist (parser '(yml-parse-string yml-parse-string-all))
+          (ert-info ((format "%s / %s / %s" parser object-type array-type))
+            (let* ((parsed (funcall parser yaml :object-type object-type
+                                    :array-type array-type))
+                   (root (if (eq parser 'yml-parse-string-all)
+                             (progn (should (= (length parsed) 1)) (car parsed))
+                           parsed))
+                   (outer (yml-tests--field root "outer" object-type))
+                   (items (yml-tests--field outer "items" object-type))
+                   (empty (yml-tests--field outer "empty" object-type))
+                   (mapping (yml-tests--field outer "mapping" object-type)))
+              (should (if (eq array-type 'array)
+                          (vectorp items) (listp items)))
+              (should (= (length items) 2))
+              (should (= (elt items 0) 1))
+              (should (equal (yml-tests--field (elt items 1) "name" object-type)
+                             "café"))
+              (should (equal empty (if (eq array-type 'array) [] nil)))
+              (if (eq object-type 'hash-table)
+                  (progn
+                    (should (hash-table-p root))
+                    (should (eq (hash-table-test root) 'equal))
+                    (should (hash-table-p mapping))
+                    (should (= (hash-table-count mapping) 0)))
+                (should (null mapping))))))))
+    (should (equal (yml-parse-string "name: café" :object-type 'alist)
+                   '(("name" . "café"))))
+    (should (equal (yml-parse-string "name: café" :object-type 'plist)
+                   '(:name "café")))
+    (should (= (gethash 7 (yml-parse-string "7: 8")) 8))
+    (should (equal (yml-parse-string "7: 8" :object-type 'alist) '((7 . 8))))
+    (should (= (gethash "key" (yml-parse-string "{key: 1, key: 2}")) 2))
+    (should (equal (yml-parse-string "{key: 1, key: 2}" :object-type 'alist)
+                   '(("key" . 1) ("key" . 2))))
+    (should (equal (yml-parse-string "{key: 1, key: 2}" :object-type 'plist)
+                   '(:key 1 :key 2)))
+    (dolist (object-type '(hash-table alist plist))
+      (let* ((root (yml-parse-string "source: &node {items: [1, 2]}\ncopy: *node"
+                                     :object-type object-type))
+             (copy (yml-tests--field root "copy" object-type)))
+        (should (equal (yml-tests--field copy "items" object-type) [1 2]))))
+    (should (equal (yml-parse-string "[!!int 42, !!str 42, !!float 1, 'false']")
+                   [42 "42" 1.0 "false"]))))
+
+(ert-deftest yml-native-custom-sentinels ()
+  (dolist (sentinels (list (list :null :false)
+                           (list 'missing 'disabled)
+                           (list nil 'disabled)
+                           (list 'missing nil)
+                           (list (vector 'missing) (list 'disabled))))
+    (let* ((null-object (car sentinels))
+           (false-object (cadr sentinels))
+           (options (list :null-object null-object :false-object false-object)))
+      (dolist (parser '(yml-parse-string yml-parse-string-all))
+        (dolist (case (list (cons "null" null-object)
+                            (cons "false" false-object)))
+          (let ((parsed (apply parser (car case) options)))
+            (should (eq (if (eq parser 'yml-parse-string-all)
+                            (car parsed) parsed)
+                        (cdr case)))))
+        (let* ((parsed (apply parser "{values: [null, false, true]}" options))
+               (root (if (eq parser 'yml-parse-string-all) (car parsed) parsed))
+               (values (gethash "values" root)))
+          (should (eq (aref values 0) null-object))
+          (should (eq (aref values 1) false-object))
+          (should (eq (aref values 2) t))))
+      (let ((documents (apply #'yml-parse-string-all
+                              "---\nnull\n---\nfalse\n" options)))
+        (should (= (length documents) 2))
+        (should (eq (car documents) null-object))
+        (should (eq (cadr documents) false-object)))
+      (should (eq (yml-parse-string (apply #'yml-serialize null-object options))
+                  :null))
+      (should (eq (yml-parse-string (apply #'yml-serialize false-object options))
+                  :false))
+      (should (equal (yml-parse-string
+                      (apply #'yml-serialize
+                             (vector null-object false-object t) options))
+                     [:null :false t]))))
+  (should (eq (yml-parse-string
+               (yml-serialize nil :null-object nil :false-object nil))
+              :null)))
+
+(ert-deftest yml-native-serializer-conversions ()
+  (let* ((values ["café 🐈" "false" "" 42 1.0 1.25
+                  -9223372036854775808 9223372036854775807 t :false :null []])
+         (table (make-hash-table :test 'equal)))
+    (puthash "values" values table)
+    (puthash "child" '(:enabled t) table)
+    (dolist (object (list table
+                          (list (cons "values" values)
+                                (cons "child" '(("enabled" . t))))
+                          (list :values values 'child '(:enabled t))))
+      (let ((parsed (yml-parse-string (yml-serialize object))))
+        (should (= (hash-table-count parsed) 2))
+        (should (equal (gethash "values" parsed) values))
+        (should (floatp (aref (gethash "values" parsed) 4)))
+        (should (eq (gethash "enabled" (gethash "child" parsed)) t))))
+    (dolist (empty (list nil (make-hash-table :test 'equal)))
+      (let ((parsed (yml-parse-string (yml-serialize empty))))
+        (should (hash-table-p parsed))
+        (should (= (hash-table-count parsed) 0))))
+    (should (equal (yml-parse-string (yml-serialize [])) []))
+    (dolist (object '((("key" . 1) ("key" . 2)) (:key 1 :key 2)))
+      (should (= (gethash "key" (yml-parse-string (yml-serialize object))) 2)))))
+
+(defun yml-tests--round-trip (yaml expected)
+  "Check YAML against EXPECTED alist data, then round-trip all mapping types."
+  (should (equal (yml-parse-string yaml :object-type 'alist) expected))
+  (dolist (object-type '(hash-table alist plist))
+    (ert-info ((format "Round trip with %s mappings" object-type))
+      (let* ((parsed (yml-parse-string yaml :object-type object-type))
+             (serialized (yml-serialize parsed)))
+        (should (equal (yml-parse-string serialized :object-type 'alist)
+                       expected))))))
+
+(ert-deftest yml-complex-service-config-round-trip ()
+  (yml-tests--round-trip
+   "# A service configuration with nested block and flow collections.
+service:
+  name: café-api
+  replicas: 3
+  enabled: true
+  ports:
+    - {name: http, port: 8080, tls: false}
+    - name: metrics
+      port: 9090
+      tls: true
+  environment:
+    RETRIES: '3'
+    FEATURE_FLAG: 'false'
+    OPTIONAL: null
+  healthcheck:
+    command: [curl, '--fail', 'http://localhost:8080/health']
+    interval: 1.5
+  volumes: []
+  annotations: {}
+"
+   '(("service" . (("name" . "café-api")
+                   ("replicas" . 3)
+                   ("enabled" . t)
+                   ("ports" . [(("name" . "http") ("port" . 8080) ("tls" . :false))
+                               (("name" . "metrics") ("port" . 9090) ("tls" . t))])
+                   ("environment" . (("RETRIES" . "3")
+                                     ("FEATURE_FLAG" . "false")
+                                     ("OPTIONAL" . :null)))
+                   ("healthcheck" . (("command" . ["curl" "--fail" "http://localhost:8080/health"])
+                                     ("interval" . 1.5)))
+                   ("volumes" . [])
+                   ("annotations" . nil))))))
+
+(ert-deftest yml-complex-aliases-and-block-scalars-round-trip ()
+  (yml-tests--round-trip
+   "defaults: &defaults
+  retries: 4
+  flags: [true, false, null]
+  labels: {region: eu, owner: 'équipe 🐈'}
+jobs:
+  - name: build
+    settings: *defaults
+    script: |
+      echo \"hello\"
+      make test
+  - name: deploy
+    settings: *defaults
+    description: >-
+      Deploy the service
+      after tests pass.
+    version: !!str 2.0
+    attempts: !!int 3
+"
+   '(("defaults" . (("retries" . 4)
+                    ("flags" . [t :false :null])
+                    ("labels" . (("region" . "eu") ("owner" . "équipe 🐈")))))
+     ("jobs" . [(("name" . "build")
+                 ("settings" . (("retries" . 4)
+                                ("flags" . [t :false :null])
+                                ("labels" . (("region" . "eu") ("owner" . "équipe 🐈")))))
+                 ("script" . "echo \"hello\"\nmake test\n"))
+                (("name" . "deploy")
+                 ("settings" . (("retries" . 4)
+                                ("flags" . [t :false :null])
+                                ("labels" . (("region" . "eu") ("owner" . "équipe 🐈")))))
+                 ("description" . "Deploy the service after tests pass.")
+                 ("version" . "2.0")
+                 ("attempts" . 3))]))))
+
+(ert-deftest yml-complex-multi-document-round-trip ()
+  (let ((yaml "---
+kind: Config
+metadata: {name: production, labels: {team: platform}}
+data:
+  endpoints: [https://api.example.test, https://backup.example.test]
+  timeout: 2.5
+---
+- name: rollout
+  steps:
+    - {action: deploy, dry_run: false}
+    - {action: verify, checks: [health, metrics]}
+- name: cleanup
+  steps: []
+...\n")
+        (expected
+         '((("kind" . "Config")
+            ("metadata" . (("name" . "production")
+                           ("labels" . (("team" . "platform")))))
+            ("data" . (("endpoints" . ["https://api.example.test" "https://backup.example.test"])
+                       ("timeout" . 2.5))))
+           [(("name" . "rollout")
+             ("steps" . [(("action" . "deploy") ("dry_run" . :false))
+                         (("action" . "verify") ("checks" . ["health" "metrics"]))]))
+            (("name" . "cleanup") ("steps" . []))])))
+    (should (equal (yml-parse-string-all yaml :object-type 'alist) expected))
+    (dolist (object-type '(hash-table alist plist))
+      (ert-info ((format "Multi-document round trip with %s mappings" object-type))
+        (let* ((documents (yml-parse-string-all yaml :object-type object-type))
+               (serialized (mapconcat #'yml-serialize documents "\n")))
+          (should (equal (yml-parse-string-all serialized :object-type 'alist)
+                         expected)))))))
+
+(ert-deftest yml-native-errors-and-recovery ()
+  (dolist (parser '(yml-parse-string yml-parse-string-all))
+    (should-error (funcall parser "[") :type 'yml-parse-error)
+    (should-error (funcall parser "&loop [*loop]") :type 'yml-parse-error)
+    (should-error (funcall parser "!!int invalid") :type 'yml-parse-error)
+    (should-error (funcall parser "7: value" :object-type 'plist)
+                  :type 'yml-non-string-key)
+    (should-error (funcall parser "1" :object-type 'invalid) :type 'error)
+    (should-error (funcall parser "1" :array-type 'invalid) :type 'error)
+    (should-error (funcall parser 42) :type 'wrong-type-argument)
+    (should (equal (funcall parser "42")
+                   (if (eq parser 'yml-parse-string-all) '(42) 42))))
+  (should-error (yml-parse-string "---\n1\n---\n2\n")
+                :type 'yml-trailing-content)
+  (should (equal (yml-parse-string-all "---\n1\n---\n2\n") '(1 2)))
+  (dolist (object (list 'unsupported (current-buffer)
+                        '(:key) '(:key 1 . tail)
+                        9223372036854775808 -9223372036854775809))
+    (ert-info ((format "Serialization of %S" object))
+      (should-error (yml-serialize object) :type 'yml-serialization-error)
+      ;; Check if poisoned from earlier runs
+      (should (equal (yml-parse-string (yml-serialize [1])) [1]))))
+  (should-error (yml-serialize '("not-a-symbol" 1)) :type 'wrong-type-argument)
+  (should (equal (yml-parse-string (yml-serialize [2])) [2])))
+
+(provide 'yml-tests)
+;;; yml-tests.el ends here
