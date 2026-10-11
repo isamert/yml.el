@@ -44,13 +44,30 @@ the YAML quirks too.
 
 ## Installation
 
-### Automatic
+```elisp
+(use-package ellm
+  ;; elpaca
+  :ensure (:host github :repo "isamert/ellm.el"
+           :files ("*.el"))
 
-TODO
+  ;; vc (requires use-package-vc)
+  ;; :vc (:url "https://github.com/isamert/ellm.el")
 
-### Manual
+  ;; straight.el
+  ;; :straight (:host github :repo "isamert/ellm.el"
+  ;;            :files ("*.el"))
+  )
+```
 
-Build requires Rust 1.85 or newer and Cargo to be pre-installed.
+### Automatic native module installation
+
+After installing the package, do `M-x yml-install-module`.  You'll be
+asked if you want to download a prebuilt library or if you want to
+compile it yourself.
+
+### Manual native module installation
+
+Build requires Rust 1.87 or newer and Cargo to be pre-installed.
 
 ```shell
 git clone https://github.com/isamert/yml.el
@@ -102,11 +119,11 @@ Try it:
 
 Average milliseconds per parse, on Emacs 31.1, x86-64 Linux.
 
-| Input       |    Size | yml.el hash-table | yml.el alist | yml.el plist | emacs-libyaml |
-|-------------|--------:|------------------:|-------------:|-------------:|--------------:|
-| docker.yaml |  470 KB |             14.85 |        13.39 |    **11.42** |         14.91 |
-| github.yaml | 9.90 MB |            291.87 |       265.09 |   **245.84** |        312.36 |
-| gitlab.yaml | 2.45 MB |             94.56 |        88.56 |    **79.85** |         98.21 |
+| Input       |    Size | yml.el hash-table | yml.el alist | yml.el plist | emacs-libyaml (only hash-table) |
+|-------------|--------:|------------------:|-------------:|-------------:|--------------------------------:|
+| docker.yaml |  470 KB |             14.85 |        13.39 |    **11.42** |                           14.91 |
+| github.yaml | 9.90 MB |            291.87 |       265.09 |   **245.84** |                          312.36 |
+| gitlab.yaml | 2.45 MB |             94.56 |        88.56 |    **79.85** |                           98.21 |
 
 I was only able to complete the **docker.yaml** benchmark with
 yaml.el, which took **9.89 seconds** for one parse. So I just excluded
