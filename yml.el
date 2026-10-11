@@ -51,10 +51,10 @@ then this function signals an error of type `yml-trailing-content'.  You
 can use `yml-parse-string-all' to parse multi document YAML strings.
 
 OBJECT-TYPE TYPE -- use TYPE to represent YAML objects.
-  TYPE can be `hash-table' (the default), `alist' or `plist'.
-  Duplicate mapping keys are rejected with `yml-parse-error' for all
-  object types.  With `plist', non-string keys signal an error of type
-  `yml-non-string-key'.
+  TYPE can be `hash-table' (the default), `alist' or `plist'.  Duplicate
+  mapping keys are not rejected: hash-tables use the last value, while
+  alists and plists retain duplicate entries.  With `plist', non-string
+  keys signal an error of type `yml-non-string-key'.
 
 ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
   TYPE can be `array' (the default) or `list'.
@@ -117,7 +117,8 @@ Integers outside the signed 64-bit range (-2^63 through 2^63-1) signal
 `yml-serialization-error'.
 
 For duplicate object keys in an alist or plist, the last value is used.
-Parsing YAML with duplicate mapping keys is not supported.
+When parsing, hash-tables use the last duplicate mapping value, while
+alists and plists retain duplicate entries.
 
 The Lisp equivalents to the YAML null and false values are
 configurable:

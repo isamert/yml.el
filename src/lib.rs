@@ -19,7 +19,10 @@
 
 use emacs::{Env, ErrorKind, IntoLisp, ModuleError, Result, Value, Vector, defun};
 use hashlink::LinkedHashMap;
-use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};
+use yaml_rust2::{Yaml, YamlEmitter};
+
+mod yaml_tree;
+use yaml_tree::{Node, NodeId, YamlTree};
 
 emacs::plugin_is_GPL_compatible!();
 
@@ -130,7 +133,7 @@ fn _parse_string<'e>(
         false_object,
     };
 
-    let documents = match YamlLoader::load_from_str(&yaml) {
+    let documents = match YamlTree::load(&yaml) {
         Ok(documents) => documents,
         Err(error) => {
             let marker = error.marker();
@@ -148,104 +151,106 @@ fn _parse_string<'e>(
 
     if parse_all.is_some() {
         let all_documents = documents
-            .into_iter()
-            .map(|doc| yaml_to_lisp(env, doc, &options))
+            .roots
+            .iter()
+            .map(|&root| yaml_to_lisp(env, &documents, root, &options))
             .collect::<Result<Vec<_>>>()?;
 
         env.list(&all_documents)
     } else {
-        if documents.len() > 1 {
+        if documents.roots.len() > 1 {
             return env.signal(
                 yml_trailing_content,
                 ("Expected a single YAML document; found multiple documents",),
             );
         }
 
-        let document = documents.into_iter().next().unwrap_or(Yaml::Null);
-        yaml_to_lisp(env, document, &options)
+        match documents.roots.first() {
+            Some(&root) => yaml_to_lisp(env, &documents, root, &options),
+            None => Ok(options.null_object),
+        }
     }
 }
 
 // ** Helpers
 
-fn yaml_to_lisp<'e>(env: &'e Env, yaml: Yaml, options: &ParseOptions<'e>) -> Result<Value<'e>> {
-    match yaml {
-        Yaml::Null => Ok(options.null_object),
-        Yaml::String(s) => s.into_lisp(env),
-        Yaml::Boolean(false) => Ok(options.false_object),
-        Yaml::Boolean(true) => true.into_lisp(env),
-        Yaml::Array(items) => {
+fn yaml_to_lisp<'e>(
+    env: &'e Env,
+    documents: &YamlTree,
+    node: NodeId,
+    options: &ParseOptions<'e>,
+) -> Result<Value<'e>> {
+    match &documents.nodes[node] {
+        Node::Scalar(scalar) => match scalar {
+            Yaml::Null => Ok(options.null_object),
+            Yaml::String(s) => s.into_lisp(env),
+            Yaml::Boolean(false) => Ok(options.false_object),
+            Yaml::Boolean(true) => true.into_lisp(env),
+            Yaml::Real(_) => scalar.as_f64().into_lisp(env),
+            Yaml::Integer(value) => (*value).into_lisp(env),
+            Yaml::BadValue => env.signal(yml_parse_error, ("Invalid YAML value",)),
+            _ => unreachable!("document scalar cannot contain a collection"),
+        },
+        Node::Sequence(items) => {
             let values = items
-                .into_iter()
-                .map(|item| yaml_to_lisp(env, item, options))
+                .iter()
+                .map(|&item| yaml_to_lisp(env, documents, item, options))
                 .collect::<Result<Vec<_>>>()?;
             match options.array_type {
                 ArrayType::List => env.list(&values),
                 ArrayType::Array => env.vector(&values),
             }
         }
-        Yaml::Hash(t) => match options.object_type {
+        Node::Mapping(pairs) => match options.object_type {
             ObjectType::HashTable => {
                 let hash = FN_MAKE_HASH_TABLE.bind(env).call([
                     SYM_PARAM_TEST.bind(env),
                     SYM_EQUAL.bind(env),
                     SYM_PARAM_SIZE.bind(env),
-                    t.len().into_lisp(env)?,
+                    pairs.len().into_lisp(env)?,
                 ])?;
-
-                for (key, value) in t {
+                for &(key, value) in pairs {
                     FN_PUTHASH.bind(env).call([
-                        yaml_to_lisp(env, key, options)?,
-                        yaml_to_lisp(env, value, options)?,
+                        yaml_to_lisp(env, documents, key, options)?,
+                        yaml_to_lisp(env, documents, value, options)?,
                         hash,
                     ])?;
                 }
                 Ok(hash)
             }
             ObjectType::AssociationList => {
-                let pairs = t
-                    .into_iter()
-                    .map(|(key, val)| {
+                let values = pairs
+                    .iter()
+                    .map(|&(key, value)| {
                         env.cons(
-                            yaml_to_lisp(env, key, options)?,
-                            yaml_to_lisp(env, val, options)?,
+                            yaml_to_lisp(env, documents, key, options)?,
+                            yaml_to_lisp(env, documents, value, options)?,
                         )
                     })
                     .collect::<Result<Vec<_>>>()?;
-
-                env.list(&pairs)
+                env.list(&values)
             }
             ObjectType::PropertyList => {
-                let mut plist = Vec::with_capacity(t.len() * 2);
-
-                for (key, value) in t {
-                    let keyword = match key {
-                        Yaml::String(key) => env.intern(&format!(":{key}"))?,
-                        key => {
+                let mut plist = Vec::with_capacity(pairs.len() * 2);
+                for &(key, value) in pairs {
+                    let keyword = match &documents.nodes[key] {
+                        Node::Scalar(Yaml::String(key)) => env.intern(&format!(":{key}"))?,
+                        _ => {
                             return env.signal(
                                 yml_non_string_key,
                                 (
                                     "YAML plist keys must be strings",
-                                    yaml_to_lisp(env, key, options)?,
+                                    yaml_to_lisp(env, documents, key, options)?,
                                 ),
                             );
                         }
                     };
-
                     plist.push(keyword);
-                    plist.push(yaml_to_lisp(env, value, options)?);
+                    plist.push(yaml_to_lisp(env, documents, value, options)?);
                 }
-
                 env.list(&plist)
             }
         },
-        Yaml::Real(_) => yaml.as_f64().into_lisp(env),
-        Yaml::Integer(value) => value.into_lisp(env),
-        Yaml::Alias(id) => env.signal(
-            yml_unsupported_alias,
-            ("Unsupported alias field in the parsed YAML", id),
-        ),
-        Yaml::BadValue => env.signal(yml_parse_error, ("Invalid YAML value",)),
     }
 }
 
