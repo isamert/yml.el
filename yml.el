@@ -4,7 +4,7 @@
 
 ;; Author: Isa Mert Gurbuz <isamertgurbuz@gmail.com>
 ;; URL: https://github.com/isamert/yml.el
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; License: GPL-3.0-or-later
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;; Package-Requires: ((emacs "26.1"))
