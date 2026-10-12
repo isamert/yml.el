@@ -8,6 +8,8 @@ the YAML quirks too.
 
 ## Usage
 
+### Parsing
+
 ```elisp
 (require 'yml)
 
@@ -34,12 +36,43 @@ the YAML quirks too.
 (yml-parse-string-all "---\nname: first\n---\nname: second\n"
                       :object-type 'plist)
 ;; => ((:name "first") (:name "second"))
+```
 
+### Serializing
+
+```elisp
 (yml-serialize '(:name "example" :items [1 2]))
 ;; => "---\nname: example\nitems:\n  - 1\n  - 2"
 
 (yml-serialize [t nil missing] :false-object nil :null-object 'missing)
 ;; => "---\n- true\n- false\n- ~"
+```
+
+### Error handling
+
+These are all the errors that can be raised, all inherits from `yml-error`:
+
+```elisp
+yml-error
+yml-non-string-key
+yml-parse-error
+yml-serialization-error
+yml-trailing-content
+yml-unsupported-alias
+```
+
+You can inspect the errors this way:
+
+```elisp
+(condition-case err
+    (yml-parse-string text)
+  (yml-parse-error
+   (pcase err
+     (`(yml-parse-error ,msg ,line ,column ,position)
+      (message "%s at line %d, column %d (position %d)"
+               msg line column position))
+     (_
+      (message "%s" (error-message-string err))))))
 ```
 
 ## Installation
