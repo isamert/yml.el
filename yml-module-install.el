@@ -298,4 +298,8 @@ Build outputs are retained in the *yml-build* compilation buffer."
       (?c (message "yml installation cancelled")))))
 
 (provide 'yml-module-install)
+
+;; Local Variables:
+;; package-lint-main-file: "yml.el"
+;; End:
 ;;; yml-module-install.el ends here

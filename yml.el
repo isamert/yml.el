@@ -7,6 +7,7 @@
 ;; Version: 0.1.0
 ;; License: GPL-3.0-or-later
 ;; SPDX-License-Identifier: GPL-3.0-or-later
+;; Package-Requires: ((emacs "26.1"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -66,8 +67,8 @@ ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
   TYPE can be `array' (the default) or `list'.
 
 Integer parsing follows yaml-rust2.  Integers within the signed 64-bit
-range (-2^63 through 2^63-1) are represented exactly; larger literals may
-be interpreted as floats or strings, or rejected, depending on their
+range (-2^63 through 2^63-1) are represented exactly; larger literals
+may be interpreted as floats or strings, or rejected, depending on their
 syntax and tags.  Large decimal literals can lose precision when parsed
 as floats; exact large-integer round trips are not guaranteed.
 
