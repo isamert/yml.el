@@ -44,7 +44,8 @@
     (string &key
             (object-type 'hash-table)
             (object-key-type 'symbol)
-            (array-type 'array)
+            (array-type)
+            (sequence-type)
             (null-object :null)
             (false-object :false))
   "Parse the YAML STRING into a Lisp value.
@@ -73,6 +74,9 @@ OBJECT-KEY-TYPE TYPE -- use TYPE to represent YAML object keys.
 ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
   TYPE can be `array' (the default) or `list'.
 
+SEQUENCE-TYPE -- Same as ARRAY-TYPE, for yaml.el compatibility.  Use
+only one.
+
 Integer parsing follows yaml-rust2.  Integers within the signed 64-bit
 range (-2^63 through 2^63-1) are represented exactly; larger literals
 may be interpreted as floats or strings, or rejected, depending on their
@@ -86,24 +90,25 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to `:false'."
   (yml--ensure-module)
   (yml-core--parse-string
-   string object-type object-key-type array-type null-object false-object nil))
+   string object-type object-key-type (or array-type sequence-type 'array) null-object false-object nil))
 
 ;;;###autoload
 (cl-defun yml-parse-string-all
     (string &key
             (object-type 'hash-table)
             (object-key-type 'symbol)
-            (array-type 'array)
+            (array-type)
+            (sequence-type)
             (null-object :null)
             (false-object :false))
   "Same as `yml-parse-string' but supports multi document YAMLs.
 
 Returned result is a list of Lisp objects.  See `yml-parse-string' for
-STRING, OBJECT-TYPE, OBJECT-KEY-TYPE, ARRAY-TYPE, NULL-OBJECT AND
-FALSE-OBJECT."
+STRING, OBJECT-TYPE, OBJECT-KEY-TYPE, ARRAY-TYPE, SEQUENCE-TYPE,
+NULL-OBJECT AND FALSE-OBJECT."
   (yml--ensure-module)
   (yml-core--parse-string
-   string object-type object-key-type array-type null-object false-object
+   string object-type object-key-type (or array-type sequence-type 'array) null-object false-object
    'parse-all))
 
 ;;;###autoload
