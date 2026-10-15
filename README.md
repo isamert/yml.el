@@ -1,4 +1,4 @@
-# yml.el -- Fast & correct YAML parser for Emacs
+# yml.el -- Fastest YAML parser for Emacs
 
 **yml.el** is a fast YAML parser for Emacs Lisp. It is a simple
 wrapper around Rust's `yaml-rust2`, enables you to parse YAML
@@ -18,7 +18,7 @@ the YAML quirks too.
 
 (yml-parse-string "name: example\nitems: [1, 2]"
                   :object-type 'alist)
-;; => (("name" . "example") ("items" . [1 2]))
+;; => ((name . "example") (items . [1 2]))
 
 (yml-parse-string "name: example\nitems: [1, 2]"
                   :object-type 'plist
@@ -167,6 +167,30 @@ To reproduce (dependencies and inputs are cached in temporary directories):
 ```sh
 emacs --batch -Q -L . -l benchmarks/yml-bench.el --eval '(yml-bench-run 15)'
 ```
+
+
+### Differences from yaml.el
+
+The API is similar to [yaml.el](https://github.com/zkry/yaml.el), it's
+almost a drop-in replacement but they differ in some specifics:
+
+- Hash-table keys default to strings, not symbols. Both support
+  explicit `:object-key-type`; alists default to symbols and plists to
+  keywords.
+- Symbol/keyword key modes reject non-string YAML keys; yaml.el
+  preserves them. String mode preserves parsed YAML key types,
+  including non-strings.
+- Alists and plists retain duplicate keys; yaml.el collapses
+  them. When serializing duplicates, yml.el uses the last value.
+- Both `:array-type` and yaml.el's `:sequence-type` are accepted;
+  `:array-type` takes precedence when both are non-nil.
+- The `:string-values` option is not supported. Scalar resolution and
+  tag handling follow `yaml-rust2` and may differ from yaml.el.
+- Function names and error types differ.
+- `yml-parse-string-all` explicitly supports multi-document input.
+
+The differences generally come from preferring
+`json-parse-string`-esque API.
 
 ## Rationale
 
