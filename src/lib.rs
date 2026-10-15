@@ -39,9 +39,16 @@ enum ObjectType {
     AssociationList,
 }
 
+enum ObjectKeyType {
+    Symbol,
+    Keyword,
+    String,
+}
+
 struct ParseOptions<'e> {
     array_type: ArrayType,
     object_type: ObjectType,
+    object_key_type: ObjectKeyType,
     null_object: Value<'e>,
     false_object: Value<'e>,
 }
@@ -65,6 +72,7 @@ emacs::use_symbols! {
     SYM_INTEGER => "integer"
     SYM_FLOAT => "float"
     SYM_SYMBOL => "symbol"
+    SYM_KEYWORD => "keyword"
     SYM_CONS => "cons"
     SYM_STRING => "string"
     SYM_VECTOR => "vector"
@@ -88,7 +96,7 @@ emacs::define_errors! {
     yml_parse_error "YAML parsing error" (yml_error)
     yml_trailing_content "Unexpected additional YAML document" (yml_parse_error)
     yml_unsupported_alias "Unsupported YAML alias" (yml_parse_error)
-    yml_non_string_key "Unexpected non-string key with plist object type" (yml_parse_error)
+    yml_non_string_key "Unexpected non-string key with plist/alist object type" (yml_parse_error)
 }
 
 // * defun yml-core--parse-string
@@ -98,6 +106,7 @@ fn _parse_string<'e>(
     env: &'e Env,
     yaml: String,
     object_type: Value<'e>,
+    object_key_type: Value<'e>,
     array_type: Value<'e>,
     null_object: Value<'e>,
     false_object: Value<'e>,
@@ -126,9 +135,25 @@ fn _parse_string<'e>(
         }
     };
 
+    let object_key_type = match object_key_type {
+        value if value == SYM_SYMBOL.bind(env) => ObjectKeyType::Symbol,
+        value if value == SYM_KEYWORD.bind(env) => ObjectKeyType::Keyword,
+        value if value == SYM_STRING.bind(env) => ObjectKeyType::String,
+        value => {
+            return env.signal(
+                "error",
+                (
+                    "One of symbol, keyword or string should be specified",
+                    value,
+                ),
+            );
+        }
+    };
+
     let options = ParseOptions {
         array_type,
         object_type,
+        object_key_type,
         null_object,
         false_object,
     };
@@ -222,10 +247,19 @@ fn yaml_to_lisp<'e>(
                 let values = pairs
                     .iter()
                     .map(|&(key, value)| {
-                        env.cons(
-                            yaml_to_lisp(env, documents, key, options)?,
-                            yaml_to_lisp(env, documents, value, options)?,
-                        )
+                        let lisp_key = match options.object_key_type {
+                            ObjectKeyType::Symbol => {
+                                let str = yaml_parse_key_as_string(env, options, documents, key)?;
+                                env.intern(str)?
+                            }
+                            ObjectKeyType::Keyword => {
+                                let str = yaml_parse_key_as_string(env, options, documents, key)?;
+                                env.intern(&format!(":{str}"))?
+                            }
+                            ObjectKeyType::String => yaml_to_lisp(env, documents, key, options)?,
+                        };
+                        let lisp_val = yaml_to_lisp(env, documents, value, options)?;
+                        env.cons(lisp_key, lisp_val)
                     })
                     .collect::<Result<Vec<_>>>()?;
                 env.list(&values)
@@ -233,17 +267,12 @@ fn yaml_to_lisp<'e>(
             ObjectType::PropertyList => {
                 let mut plist = Vec::with_capacity(pairs.len() * 2);
                 for &(key, value) in pairs {
-                    let keyword = match &documents.nodes[key] {
-                        Node::Scalar(Yaml::String(key)) => env.intern(&format!(":{key}"))?,
-                        _ => {
-                            return env.signal(
-                                yml_non_string_key,
-                                (
-                                    "YAML plist keys must be strings",
-                                    yaml_to_lisp(env, documents, key, options)?,
-                                ),
-                            );
+                    let keyword = match options.object_key_type {
+                        ObjectKeyType::Symbol | ObjectKeyType::Keyword => {
+                            let str = yaml_parse_key_as_string(env, options, documents, key)?;
+                            env.intern(&format!(":{str}"))?
                         }
+                        ObjectKeyType::String => yaml_to_lisp(env, documents, key, options)?,
                     };
                     plist.push(keyword);
                     plist.push(yaml_to_lisp(env, documents, value, options)?);
@@ -251,6 +280,24 @@ fn yaml_to_lisp<'e>(
                 env.list(&plist)
             }
         },
+    }
+}
+
+fn yaml_parse_key_as_string<'e>(
+    env: &'e Env,
+    options: &ParseOptions<'e>,
+    documents: &'e YamlTree,
+    node_id: NodeId,
+) -> Result<&'e str> {
+    match &documents.nodes[node_id] {
+        Node::Scalar(Yaml::String(str)) => Ok(str),
+        _ => env.signal(
+            yml_non_string_key,
+            (
+                "YAML keys must be strings for symbol or keyword conversion.",
+                yaml_to_lisp(env, documents, node_id, options)?,
+            ),
+        ),
     }
 }
 
@@ -371,8 +418,15 @@ fn serialize_helper<'e>(
             for pair in items {
                 let key: Value<'e> = pair.car()?;
                 let value: Value<'e> = pair.cdr()?;
+                let yaml_key = if env.type_of(key)? == SYM_SYMBOL.bind(env) {
+                    let name: String = FN_SYMBOL_NAME.bind(env).call([key])?.into_rust()?;
+                    Yaml::String(name)
+                } else {
+                    serialize_helper(env, key, null_object, false_object)?
+                };
+
                 map.insert(
-                    serialize_helper(env, key, null_object, false_object)?,
+                    yaml_key,
                     serialize_helper(env, value, null_object, false_object)?,
                 );
             }

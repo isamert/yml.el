@@ -34,7 +34,7 @@
 (require 'cl-lib)
 
 (declare-function yml-core--parse-string "yml-core"
-                  (string object-type array-type null-object false-object parse-all))
+                  (string object-type object-key-type array-type null-object false-object parse-all))
 (declare-function yml-core--serialize "yml-core" (object null-object false-object))
 
 ;;;; Public
@@ -43,6 +43,7 @@
 (cl-defun yml-parse-string
     (string &key
             (object-type 'hash-table)
+            (object-key-type 'symbol)
             (array-type 'array)
             (null-object :null)
             (false-object :false))
@@ -60,8 +61,14 @@ can use `yml-parse-string-all' to parse multi document YAML strings.
 OBJECT-TYPE TYPE -- use TYPE to represent YAML objects.
   TYPE can be `hash-table' (the default), `alist' or `plist'.  Duplicate
   mapping keys are not rejected: hash-tables use the last value, while
-  alists and plists retain duplicate entries.  With `plist', non-string
-  keys signal an error of type `yml-non-string-key'.
+  alists and plists retain duplicate entries.
+
+OBJECT-KEY-TYPE TYPE -- use TYPE to represent YAML object keys.
+  TYPE can be `symbol', `keyword', `string'.  By default this is symbol,
+  for OBJECT-TYPE `plist', `symbol' and `keyword' means the same thing;
+  `keyword'.  For OBJECT-TYPE `hash-table', this is always interpreted
+  as `string'.  Non-string YAML keys when OBJECT-KEY-TYPE is `symbol' or
+  `keyword' signal `yml-non-string-key' for plists and alists.
 
 ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
   TYPE can be `array' (the default) or `list'.
@@ -79,22 +86,24 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
   It defaults to `:false'."
   (yml--ensure-module)
   (yml-core--parse-string
-   string object-type array-type null-object false-object nil))
+   string object-type object-key-type array-type null-object false-object nil))
 
 ;;;###autoload
 (cl-defun yml-parse-string-all
     (string &key
             (object-type 'hash-table)
+            (object-key-type 'symbol)
             (array-type 'array)
             (null-object :null)
             (false-object :false))
   "Same as `yml-parse-string' but supports multi document YAMLs.
 
-Returned result is a list of Lisp objects.  See `yml-parse-string'
-for STRING, OBJECT-TYPE, ARRAY-TYPE, NULL-OBJECT AND FALSE-OBJECT."
+Returned result is a list of Lisp objects.  See `yml-parse-string' for
+STRING, OBJECT-TYPE, OBJECT-KEY-TYPE, ARRAY-TYPE, NULL-OBJECT AND
+FALSE-OBJECT."
   (yml--ensure-module)
   (yml-core--parse-string
-   string object-type array-type null-object false-object
+   string object-type object-key-type array-type null-object false-object
    'parse-all))
 
 ;;;###autoload
