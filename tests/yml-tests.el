@@ -26,9 +26,13 @@
    (cl-letf (((symbol-function 'yml-core--parse-string) #'list)
              ((symbol-function 'yml-core--serialize) #'list))
      (should (equal (yml-parse-string "input")
-                    '("input" hash-table symbol array :null :false nil)))
+                    '("input" hash-table string array :null :false nil)))
      (should (equal (yml-parse-string-all "input")
-                    '("input" hash-table symbol array :null :false parse-all)))
+                    '("input" hash-table string array :null :false parse-all)))
+     (dolist (parser '(yml-parse-string yml-parse-string-all))
+       (dolist (case '((hash-table . string) (alist . symbol) (plist . keyword)))
+         (should (eq (nth 2 (funcall parser "input" :object-type (car case)))
+                     (cdr case)))))
      (should (equal (yml-serialize [1]) '([1] :null :false)))
      (dolist (parser '(yml-parse-string yml-parse-string-all))
        (should (equal (funcall parser "input"
@@ -99,8 +103,7 @@
                                   :object-type object-type
                                   :object-key-type key-type))
                  (root (if (eq parser 'yml-parse-string-all) (car parsed) parsed))
-                 (key (cond ((or (eq object-type 'hash-table)
-                                 (eq key-type 'string)) "outer")
+                 (key (cond ((eq key-type 'string) "outer")
                             ((or (eq object-type 'plist)
                                  (eq key-type 'keyword)) :outer)
                             (t 'outer)))
@@ -110,13 +113,13 @@
                  (child (cl-ecase object-type
                           (hash-table (gethash key root))
                           (alist (cdr (assoc key root)))
-                          (plist (plist-get root key #'equal)))))
+                          (plist (lax-plist-get root key)))))
             (should (equal (cl-ecase object-type
                              (hash-table (gethash name child))
                              (alist (cdr (assoc name child)))
-                             (plist (plist-get child name #'equal)))
+                             (plist (lax-plist-get child name)))
                            "café")))
-          (if (or (eq object-type 'hash-table) (eq key-type 'string))
+          (if (eq key-type 'string)
               (let* ((parsed (funcall parser "7: 8" :object-type object-type
                                       :object-key-type key-type))
                      (root (if (eq parser 'yml-parse-string-all)
@@ -131,6 +134,29 @@
                           :type 'yml-non-string-key)))))
     (should-error (funcall parser "name: value" :object-key-type 'invalid)
                   :type 'error)))
+
+(ert-deftest yml-native-hash-table-key-serialization ()
+  (dolist (parser '(yml-parse-string yml-parse-string-all))
+    (dolist (key-type '(symbol keyword))
+      (let* ((parsed (funcall parser "outer: {name: café}"
+                              :object-key-type key-type))
+             (root (if (eq parser 'yml-parse-string-all) (car parsed) parsed))
+             (serialized (yml-parse-string (yml-serialize root)))
+             (outer (if (eq key-type 'keyword) ":outer" "outer"))
+             (name (if (eq key-type 'keyword) ":name" "name")))
+        (should (equal (gethash name (gethash outer serialized)) "café")))))
+  (let ((table (make-hash-table :test 'eq)))
+    (dolist (key '(nil t :null :false missing disabled))
+      (puthash key 1 table))
+    (puthash 'null-value 'missing table)
+    (puthash 'false-value 'disabled table)
+    (let ((parsed (yml-parse-string
+                   (yml-serialize table :null-object 'missing
+                                  :false-object 'disabled))))
+      (dolist (key '(nil t :null :false missing disabled))
+        (should (= (gethash (symbol-name key) parsed) 1)))
+      (should (eq (gethash "null-value" parsed) :null))
+      (should (eq (gethash "false-value" parsed) :false)))))
 
 (ert-deftest yml-native-symbol-alist-serialization ()
   ;; Check parsed nested alists as well as manually constructed symbol keys.

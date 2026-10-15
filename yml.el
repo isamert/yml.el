@@ -43,7 +43,10 @@
 (cl-defun yml-parse-string
     (string &key
             (object-type 'hash-table)
-            (object-key-type 'symbol)
+            (object-key-type (pcase object-type
+                               ('hash-table 'string)
+                               ('plist 'keyword)
+                               (_ 'symbol)))
             (array-type)
             (sequence-type)
             (null-object :null)
@@ -65,11 +68,11 @@ OBJECT-TYPE TYPE -- use TYPE to represent YAML objects.
   alists and plists retain duplicate entries.
 
 OBJECT-KEY-TYPE TYPE -- use TYPE to represent YAML object keys.
-  TYPE can be `symbol', `keyword', `string'.  By default this is symbol,
-  for OBJECT-TYPE `plist', `symbol' and `keyword' means the same thing;
-  `keyword'.  For OBJECT-TYPE `hash-table', this is always interpreted
-  as `string'.  Non-string YAML keys when OBJECT-KEY-TYPE is `symbol' or
-  `keyword' signal `yml-non-string-key' for plists and alists.
+  TYPE can be `symbol', `keyword', or `string'.  The default is `string'
+  for hash-tables, `symbol' for alists, and `keyword' for plists.
+  For plists, `symbol' is a synonym for `keyword'.  Symbol and keyword
+  conversion requires YAML string keys; other keys signal
+  `yml-non-string-key'.  With `string', parsed YAML key types are preserved.
 
 ARRAY-TYPE TYPE -- use TYPE to represent YAML arrays.
   TYPE can be `array' (the default) or `list'.
@@ -96,7 +99,10 @@ FALSE-OBJECT OBJ -- use OBJ to represent a YAML false value.
 (cl-defun yml-parse-string-all
     (string &key
             (object-type 'hash-table)
-            (object-key-type 'symbol)
+            (object-key-type (pcase object-type
+                               ('hash-table 'string)
+                               ('plist 'keyword)
+                               (_ 'symbol)))
             (array-type)
             (sequence-type)
             (null-object :null)
@@ -126,8 +132,8 @@ integer    -- a YAML integer in the signed 64-bit range.
 float      -- a YAML floating-point number.
 string     -- a YAML string.
 vector     -- a YAML array.
-hash-table -- a YAML object.
-alist      -- a YAML object.
+hash-table -- a YAML object.  Symbol keys use their full names.
+alist      -- a YAML object.  Symbol keys use their full names.
 plist      -- a YAML object.  Keys must be symbols.
               A leading colon in plist key names is elided.
 

@@ -96,7 +96,7 @@ emacs::define_errors! {
     yml_parse_error "YAML parsing error" (yml_error)
     yml_trailing_content "Unexpected additional YAML document" (yml_parse_error)
     yml_unsupported_alias "Unsupported YAML alias" (yml_parse_error)
-    yml_non_string_key "Unexpected non-string key with plist/alist object type" (yml_parse_error)
+    yml_non_string_key "Unexpected non-string key for symbol or keyword conversion" (yml_parse_error)
 }
 
 // * defun yml-core--parse-string
@@ -236,7 +236,7 @@ fn yaml_to_lisp<'e>(
                 ])?;
                 for &(key, value) in pairs {
                     FN_PUTHASH.bind(env).call([
-                        yaml_to_lisp(env, documents, key, options)?,
+                        yaml_key_to_lisp(env, documents, key, options)?,
                         yaml_to_lisp(env, documents, value, options)?,
                         hash,
                     ])?;
@@ -247,17 +247,7 @@ fn yaml_to_lisp<'e>(
                 let values = pairs
                     .iter()
                     .map(|&(key, value)| {
-                        let lisp_key = match options.object_key_type {
-                            ObjectKeyType::Symbol => {
-                                let str = yaml_parse_key_as_string(env, options, documents, key)?;
-                                env.intern(str)?
-                            }
-                            ObjectKeyType::Keyword => {
-                                let str = yaml_parse_key_as_string(env, options, documents, key)?;
-                                env.intern(&format!(":{str}"))?
-                            }
-                            ObjectKeyType::String => yaml_to_lisp(env, documents, key, options)?,
-                        };
+                        let lisp_key = yaml_key_to_lisp(env, documents, key, options)?;
                         let lisp_val = yaml_to_lisp(env, documents, value, options)?;
                         env.cons(lisp_key, lisp_val)
                     })
@@ -267,19 +257,31 @@ fn yaml_to_lisp<'e>(
             ObjectType::PropertyList => {
                 let mut plist = Vec::with_capacity(pairs.len() * 2);
                 for &(key, value) in pairs {
-                    let keyword = match options.object_key_type {
-                        ObjectKeyType::Symbol | ObjectKeyType::Keyword => {
-                            let str = yaml_parse_key_as_string(env, options, documents, key)?;
-                            env.intern(&format!(":{str}"))?
-                        }
-                        ObjectKeyType::String => yaml_to_lisp(env, documents, key, options)?,
-                    };
-                    plist.push(keyword);
+                    plist.push(yaml_key_to_lisp(env, documents, key, options)?);
                     plist.push(yaml_to_lisp(env, documents, value, options)?);
                 }
                 env.list(&plist)
             }
         },
+    }
+}
+
+fn yaml_key_to_lisp<'e>(
+    env: &'e Env,
+    documents: &YamlTree,
+    key: NodeId,
+    options: &ParseOptions<'e>,
+) -> Result<Value<'e>> {
+    match (&options.object_key_type, &options.object_type) {
+        (ObjectKeyType::Keyword, _) | (ObjectKeyType::Symbol, ObjectType::PropertyList) => {
+            let name = yaml_parse_key_as_string(env, options, documents, key)?;
+            env.intern(&format!(":{name}"))
+        }
+        (ObjectKeyType::Symbol, _) => {
+            let name = yaml_parse_key_as_string(env, options, documents, key)?;
+            env.intern(name)
+        }
+        (ObjectKeyType::String, _) => yaml_to_lisp(env, documents, key, options),
     }
 }
 
@@ -393,7 +395,7 @@ fn serialize_helper<'e>(
             let key: Value<'e> = pair.car()?;
             let value: Value<'e> = pair.cdr()?;
             map.insert(
-                serialize_helper(env, key, null_object, false_object)?,
+                serialize_mapping_key(env, key, null_object, false_object)?,
                 serialize_helper(env, value, null_object, false_object)?,
             );
         }
@@ -418,15 +420,9 @@ fn serialize_helper<'e>(
             for pair in items {
                 let key: Value<'e> = pair.car()?;
                 let value: Value<'e> = pair.cdr()?;
-                let yaml_key = if env.type_of(key)? == SYM_SYMBOL.bind(env) {
-                    let name: String = FN_SYMBOL_NAME.bind(env).call([key])?.into_rust()?;
-                    Yaml::String(name)
-                } else {
-                    serialize_helper(env, key, null_object, false_object)?
-                };
 
                 map.insert(
-                    yaml_key,
+                    serialize_mapping_key(env, key, null_object, false_object)?,
                     serialize_helper(env, value, null_object, false_object)?,
                 );
             }
@@ -456,6 +452,20 @@ fn serialize_helper<'e>(
         Ok(Yaml::Hash(map))
     } else {
         env.signal(yml_serialization_error, ("Unexpected type of object", typ))
+    }
+}
+
+fn serialize_mapping_key<'e>(
+    env: &'e Env,
+    key: Value<'e>,
+    null_object: Value<'e>,
+    false_object: Value<'e>,
+) -> Result<Yaml> {
+    if env.type_of(key)? == SYM_SYMBOL.bind(env) {
+        let name: String = FN_SYMBOL_NAME.bind(env).call([key])?.into_rust()?;
+        Ok(Yaml::String(name))
+    } else {
+        serialize_helper(env, key, null_object, false_object)
     }
 }
 
