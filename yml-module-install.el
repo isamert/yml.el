@@ -4,7 +4,7 @@
 
 ;; Author: Isa Mert Gurbuz <isamertgurbuz@gmail.com>
 ;; URL: https://github.com/isamert/yml.el
-;; Version: 0.1.2
+;; Version: 0.1.3
 ;; License: GPL-3.0-or-later
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -50,7 +50,7 @@
 
 (defconst yml--checksum-manifest "SHA256SUMS")
 
-(defconst yml--module-version "0.1.2"
+(defconst yml--module-version "0.1.3"
   "Release matching this version of the Lisp library.")
 
 (defcustom yml-module-directory (expand-file-name "yml/" user-emacs-directory)

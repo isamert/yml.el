@@ -1,6 +1,6 @@
 [package]
 name = "emacs-yml"
-version = "0.1.2"
+version = "0.1.3"
 description = "Emacs dynamic module to parse yaml written in Rust"
 authors = ["Isa Mert Gurbuz <isamertgurbuz@gmail.com>", "Ayush Goyal <ayush@helpshift.com>"]
 edition = "2024"
