@@ -14,6 +14,8 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'yml)
+(require 'yml-core)
+(yml--ensure-module)
 
 (defun yml-tests--field (object key object-type)
   "Read string KEY from OBJECT represented by OBJECT-TYPE."

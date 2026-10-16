@@ -48,8 +48,6 @@
 
 (defconst yml--build-buffer-name "*yml-build*")
 
-(defconst yml--source-buffer-name "*yml-source*")
-
 (defconst yml--checksum-manifest "SHA256SUMS")
 
 (defconst yml--module-version "0.1.2"
@@ -62,7 +60,35 @@ Automatically loaded on any yml- function call using
 `yml--ensure-module'."
   :type 'directory :group 'yml)
 
+(defconst yml--module-api-version 1
+  "Required native API version, independent of the package release.
+Bump together with Rust's API version for incompatible interface
+changes.")
+
+(declare-function yml-core--api-version "yml-core" ())
+
 (define-error 'yml-module-unavailable "yml native module unavailable")
+(define-error 'yml-module-incompatible "yml native module incompatible")
+
+(defun yml--source-directory ()
+  "Return the validated package source directory, following symlinks."
+  (let* ((library (or (locate-library "yml-module-install.el" t)
+                      (user-error "Cannot locate the yml source tree")))
+         (directory (file-name-directory (file-truename library))))
+    (unless (file-readable-p (expand-file-name "Cargo.toml" directory))
+      (user-error "Missing Cargo.toml in %s; install yml with its Rust sources"
+                  directory))
+    directory))
+
+(defun yml--check-module-api ()
+  "Refuse calls into a native module with an incompatible API."
+  (let ((actual (and (fboundp 'yml-core--api-version)
+                     (yml-core--api-version))))
+    (unless (equal actual yml--module-api-version)
+      (signal 'yml-module-incompatible
+              (list (format
+                     "Loaded yml module API is %s; Lisp requires %s. Run M-x yml-build-module to build matching sources (or M-x yml-install-module to reinstall), then restart Emacs"
+                     (or actual "unknown") yml--module-api-version))))))
 
 (defun yml--installed-module ()
   (expand-file-name
@@ -74,9 +100,15 @@ Automatically loaded on any yml- function call using
   (unless (and module-file-suffix (fboundp 'module-load))
     (user-error "This Emacs was built without dynamic module support")))
 
+(defvar yml--checked-module-api-version nil)
+
 (defsubst yml--ensure-module ()
   (unless (featurep 'yml-core)
-    (yml--load-module)))
+    (setq yml--checked-module-api-version nil)
+    (yml--load-module))
+  (unless (equal yml--checked-module-api-version yml--module-api-version)
+    (yml--check-module-api)
+    (setq yml--checked-module-api-version yml--module-api-version)))
 
 (defun yml--load-module ()
   (condition-case err
@@ -201,23 +233,21 @@ If a module is already loaded, restart Emacs to use the replacement."
                   target system-configuration))
     target))
 
-(defun yml--finish-build (success work built destination)
-  "Install BUILT on SUCCESS and clean up WORK in every case."
-  (unwind-protect
-      (condition-case err
-          (if (not success)
-              (message "yml build failed or cancelled; see %s" yml--build-buffer-name)
-            (make-directory (file-name-directory destination) t)
-            (let ((staged (make-temp-file (concat destination ".tmp."))))
-              (unwind-protect
-                  (progn
-                    (copy-file built staged t)
-                    (yml--install-module-file staged destination))
-                (when (file-exists-p staged) (delete-file staged)))))
-        (error (display-warning 'yml (error-message-string err))))
-    (delete-directory work t)))
+(defun yml--finish-build (success built destination)
+  "Install BUILT on SUCCESS."
+  (condition-case err
+      (if (not success)
+          (message "yml build failed or cancelled; see %s" yml--build-buffer-name)
+        (make-directory (file-name-directory destination) t)
+        (let ((staged (make-temp-file (concat destination ".tmp."))))
+          (unwind-protect
+              (progn
+                (copy-file built staged t)
+                (yml--install-module-file staged destination))
+            (when (file-exists-p staged) (delete-file staged)))))
+    (error (display-warning 'yml (error-message-string err)))))
 
-(defun yml--watch-build (process work built destination)
+(defun yml--watch-build (process built destination)
   (let ((sentinel (process-sentinel process))
         (finished nil))
     (set-process-sentinel
@@ -231,71 +261,61 @@ If a module is already loaded, restart Emacs to use the replacement."
                              (buffer-live-p (process-buffer proc)))))
            (unwind-protect
                (funcall sentinel proc status)
-             (yml--finish-build success work built destination))))))))
+             (yml--finish-build success built destination))))))))
 
 ;;;###autoload
 (defun yml-build-module ()
-  "Download this release's source and asynchronously build with Cargo.
-Build outputs are retained in the *yml-build* compilation buffer."
+  "Asynchronously build the local yml sources with Cargo and install them.
+If a module is loaded, restart Emacs after building."
   (interactive)
   (yml--check-module-support)
   (require 'compile)
-  (dolist (program '("cargo" "rustc" "tar"))
+  (dolist (program '("cargo" "rustc"))
     (unless (executable-find program) (user-error "%s is required" program)))
   (when (and (get-buffer yml--build-buffer-name)
              (get-buffer-process yml--build-buffer-name))
     (user-error "A yml build is already running"))
-  (let* ((target (yml--build-target))
-         (work (make-temp-file "yml-source-" t))
-         (archive (expand-file-name "source.tar.gz" work))
+  (let* ((default-directory (yml--source-directory))
+         (target (yml--build-target))
+         (target-dir (expand-file-name "target" default-directory))
          (destination (yml--installed-module))
-         (started nil))
-    (unwind-protect
-        (progn
-          (yml--download-file
-           (format "%s/archive/refs/tags/v%s.tar.gz"
-                   yml--repository-url yml--module-version) archive)
-          (unless (eq 0 (call-process "tar" nil yml--source-buffer-name nil
-                                      "-xzf" archive "-C" work))
-            (error "Source extraction failed; see %s" yml--source-buffer-name))
-          (let* ((default-directory
-                   (expand-file-name (concat "yml.el-" yml--module-version "/") work))
-                 (target-dir (expand-file-name "target" work))
-                 (library (pcase system-type
-                            ('darwin "libyml.dylib")
-                            ('windows-nt "yml.dll")
-                            (_ "libyml.so")))
-                 (built (expand-file-name (concat target "/release/" library) target-dir))
-                 (compilation-start-hook
-                  (cons
-                   (lambda (process)
-                     (unless started
-                       (setq started t)
-                       (yml--watch-build process work built destination)))
-                   compilation-start-hook)))
-            (compilation-start
-             (concat "cargo build --release --locked --lib --target "
-                     (shell-quote-argument target) " --target-dir "
-                     (shell-quote-argument target-dir))
-             'compilation-mode (lambda (_) yml--build-buffer-name))))
-      (unless started (delete-directory work t)))))
+         (library (pcase system-type
+                    ('darwin "libyml.dylib")
+                    ('windows-nt "yml.dll")
+                    (_ "libyml.so")))
+         (built (expand-file-name (concat target "/release/" library) target-dir))
+         (started nil)
+         (compilation-start-hook
+          (cons (lambda (process)
+                  (unless started
+                    (setq started t)
+                    (yml--watch-build process built destination)))
+                compilation-start-hook)))
+    (compilation-start
+     (concat "cargo build --release --locked --lib --target "
+             (shell-quote-argument target) " --target-dir "
+             (shell-quote-argument target-dir))
+     'compilation-mode (lambda (_) yml--build-buffer-name))))
 
 ;;;###autoload
 (defun yml-install-module ()
-  "Load an existing module, or ask whether to download or build one."
+  "Install or reinstall a module by downloading or building locally.
+An already loaded module is not replaced in this process; restart Emacs
+after installation to use its replacement."
   (interactive)
   (yml--check-module-support)
-  (if (condition-case nil (progn (yml--ensure-module) t)
-        (yml-module-unavailable nil))
-      (message "yml native module is already loaded")
-    (pcase (car (read-multiple-choice
-                 "Install yml native module?"
-                 '((?d "download" "Download a verified prebuilt release")
-                   (?b "build" "Download source and build with Cargo")
-                   (?c "cancel" "Do not install"))))
-      (?d (yml-download-module))
-      (?b (yml-build-module))
-      (?c (message "yml installation cancelled")))))
+  (when (featurep 'yml-core)
+    (message "A yml module is already loaded. Reinstalling takes effect after restarting Emacs"))
+  (pcase (car (read-multiple-choice
+               (if (featurep 'yml-core)
+                   "Reinstall yml module (restart required)?"
+                 "Install yml native module?")
+               '((?d "download" "Download a verified prebuilt release")
+                 (?b "build" "Build local sources with Cargo")
+                 (?c "cancel" "Do not install"))))
+    (?d (yml-download-module))
+    (?b (yml-build-module))
+    (?c (message "yml installation cancelled"))))
 
 (provide 'yml-module-install)
 

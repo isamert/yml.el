@@ -479,3 +479,12 @@ fn serialize_mapping_key<'e>(
 fn version() -> Result<String> {
     Ok(env!("CARGO_PKG_VERSION").to_owned())
 }
+
+// * defun yml-core--api-version
+
+// Needs to be kept in sync with `yml--module-api-version`.
+// Bump for incompatible API changes.
+#[defun]
+fn _api_version() -> Result<i64> {
+    Ok(1)
+}

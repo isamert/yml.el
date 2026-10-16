@@ -81,14 +81,14 @@ You can inspect the errors this way:
 (use-package yml
   ;; elpaca
   :ensure (:host github :repo "isamert/yml.el"
-           :files ("*.el"))
+           :files ("*.el" "Cargo.toml" "Cargo.lock" "src"))
 
   ;; vc
   ;; :vc (:url "https://github.com/isamert/yml.el")
 
   ;; straight.el
   ;; :straight (:host github :repo "isamert/yml.el"
-  ;;            :files ("*.el"))
+  ;;            :files ("*.el" "Cargo.toml" "Cargo.lock" "src"))
   )
 ```
 
@@ -96,7 +96,8 @@ You can inspect the errors this way:
 
 After installing the package, do `M-x yml-install-module`.  You'll be
 asked if you want to download a prebuilt library or if you want to
-compile it yourself.
+compile the local source tree yourself. Running this command again
+offers reinstallation, even if a native module is already loaded.
 
 ### Manual native module installation
 
